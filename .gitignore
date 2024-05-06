@@ -1,0 +1,10 @@
+# Node / npm
+frontend/node_modules/
+
+# Build files
+frontend/build/
+
+# Rust / Cargo
+backend/target/
+backend/Cargo.lock
+
