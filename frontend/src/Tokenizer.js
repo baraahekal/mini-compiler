@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CodeEditor from './Code';
 
 function Tokenizer() {
     const [code, setCode] = useState('');
@@ -18,9 +19,40 @@ function Tokenizer() {
 
     return (
         <div>
-            <textarea value={code} onChange={e => setCode(e.target.value)} />
+            {/* Use the CodeEditor component instead of TextArea */}
+            <CodeEditor code={code} setCode={setCode} />
             <button onClick={tokenizeCode}>Tokenize</button>
-            {tokens && <pre>{JSON.stringify(tokens, null, 2)}</pre>}
+            {tokens && (
+                <div>
+                    <h2>Tokenized Data:</h2>
+                    <ul>
+                        <li>
+                            <h3>Keywords:</h3>
+                            <ul>
+                                {tokens.keywords.map((keyword, index) => (
+                                    <li key={index}>{keyword}</li>
+                                ))}
+                            </ul>
+                        </li>
+                        <li>
+                            <h3>Identifiers:</h3>
+                            <ul>
+                                {tokens.identifiers.map((identifier, index) => (
+                                    <li key={index}>{identifier}</li>
+                                ))}
+                            </ul>
+                        </li>
+                        <li>
+                            <h3>Operators:</h3>
+                            <ul>
+                                {tokens.operators.map((operator, index) => (
+                                    <li key={index}>{operator}</li>
+                                ))}
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            )}
         </div>
     );
 }
