@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use regex::Regex;
 use std::collections::{HashSet, HashMap};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct Code {
     code: String,
 }
@@ -14,7 +14,7 @@ struct Tokens {
     symbols: HashSet<String>,
     reserved_words: HashSet<String>,
     variables: HashSet<String>,
-    lists: HashMap<String, Vec<String>>,
+    lists: HashMap<String, String>,
     comments: Vec<String>,
 }
 
@@ -45,7 +45,7 @@ async fn tokenize_handler(code: Code) -> Result<impl Reply, Rejection> {
     let symbols = Regex::new(r"[()+\-*/%=;{},|&><!]+").unwrap();
     let reserved_words = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
     let variables = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
-    let lists = Regex::new(r"[a-zA-Z_][a-zA-Z0-9_]*\[[^\[\]]*\][^\[\]]*").unwrap();
+    let lists = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
     let single_line_comment = Regex::new(r"(?://[^\n]*)").unwrap();
     let multi_line_comment = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
 
@@ -82,9 +82,9 @@ async fn tokenize_handler(code: Code) -> Result<impl Reply, Rejection> {
     }
 
     for cap in lists.captures_iter(&cleaned_code) {
-        let list_name = cap[0].split('[').next().unwrap().to_string();
-        let list_items = cap[0].trim_start_matches(|c| c == '[').trim_end_matches(|c| c == ']').split(',').map(|s| s.trim().to_string()).collect(); // Extract list items
-        tokens.lists.insert(list_name, list_items);
+        let list_declaration = cap[1].to_string();
+        let list_initialization = cap[0].to_string();
+        tokens.lists.insert(list_declaration, list_initialization);
     }
 
     // Store comments
@@ -96,6 +96,6 @@ async fn tokenize_handler(code: Code) -> Result<impl Reply, Rejection> {
         tokens.comments.push(cap[0].to_string());
     }
 
-    // Return tokens as JSON response
+    // Return tokens as JSON file
     Ok(warp::reply::json(&tokens))
 }
