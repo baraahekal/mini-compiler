@@ -27,7 +27,7 @@ async fn main() {
         .and_then(tokenize_handler);
 
     let cors = warp::cors()
-        .allow_any_origin()
+        .allow_origin("http://localhost:3000/")
         .allow_methods(vec!["GET", "POST"])
         .allow_headers(vec!["Content-Type"]);
 
