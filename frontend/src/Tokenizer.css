@@ -1,0 +1,11 @@
+.tokenizer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center content horizontally */
+    justify-content: center; /* Center content vertically */
+    height: 100vh; /* Set the container height to viewport height */
+}
+
+.code-editor {
+    border-radius: 50px; /* Round the corners of the editor */
+}

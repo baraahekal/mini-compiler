@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CodeEditor from './Code';
+import './Tokenizer.css';
 
 function Tokenizer() {
     const [code, setCode] = useState('');
@@ -18,9 +19,9 @@ function Tokenizer() {
     };
 
     return (
-        <div>
+        <div className="tokenizer-container"> {/* Add a class for the parent container */}
             {/* Use the CodeEditor component instead of TextArea */}
-            <CodeEditor code={code} setCode={setCode} />
+            <CodeEditor code={code} setCode={setCode} className="code-editor" /> {/* Add className for the CodeEditor */}
             <button onClick={tokenizeCode}>Tokenize</button>
             {tokens && (
                 <div>

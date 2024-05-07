@@ -1,6 +1,6 @@
 import React from "react";
 import { CodeEditorEditable } from "react-code-editor-editable";
-import "highlight.js/styles/dracula.css";
+import "highlight.js/styles/gruvbox-dark.css";
 
 const CodeEditor = ({ code, setCode }) => (
   <CodeEditorEditable
@@ -8,8 +8,9 @@ const CodeEditor = ({ code, setCode }) => (
     setValue={setCode}
     width="50vw"
     height="40vh"
-    language="python"
+    language="cpp"
     inlineNumbers
+    caretColor="yellow"
   />
 );
 
