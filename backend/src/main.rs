@@ -2,6 +2,7 @@ use warp::{Filter, Rejection, Reply};
 use serde::{Serialize, Deserialize};
 use regex::Regex;
 use std::collections::{HashSet, HashMap};
+use lazy_static::lazy_static;
 
 #[derive(Deserialize)]
 struct Code {
@@ -40,15 +41,18 @@ async fn main() {
         .await;
 }
 
-async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
-    let identifiers = Regex::new(r"\b(int|float|string|double|bool|char)\b").unwrap();
-    let symbols = Regex::new(r"(&&|\|\||[()+\-*/%=;{},|&><!])").unwrap();
-    let reserved_words = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
-    let variables = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
-    let lists = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
-    let single_line_comment = Regex::new(r"(?://[^\n]*)").unwrap();
-    let multi_line_comment = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
+// Compile regular expressions once
+lazy_static! {
+    static ref IDENTIFIERS: Regex = Regex::new(r"\b(int|float|string|double|bool|char)\b").unwrap();
+    static ref SYMBOLS: Regex = Regex::new(r"(&&|\|\||[()+\-*/%=;{},|&><!])").unwrap();
+    static ref RESERVED_WORDS: Regex = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
+    static ref VARIABLES: Regex = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
+    static ref LISTS: Regex = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
+    static ref SINGLE_LINE_COMMENT: Regex = Regex::new(r"(?://[^\n]*)").unwrap();
+    static ref MULTI_LINE_COMMENT: Regex = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
+}
 
+async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     let mut tokens = Tokens {
         identifiers: HashSet::new(),
         symbols: HashSet::new(),
@@ -58,44 +62,36 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         comments: Vec::new(),
     };
 
-    // Store comments
-    for cap in single_line_comment.captures_iter(&code.code) {
+    // Store and remove comments
+    for cap in SINGLE_LINE_COMMENT.captures_iter(&code.code) {
         tokens.comments.push(cap[0].to_string());
     }
-
-    for cap in multi_line_comment.captures_iter(&code.code) {
+    for cap in MULTI_LINE_COMMENT.captures_iter(&code.code) {
         tokens.comments.push(cap[0].to_string());
     }
+    code.code = SINGLE_LINE_COMMENT.replace_all(&code.code, "").to_string();
+    code.code = MULTI_LINE_COMMENT.replace_all(&code.code, "").to_string();
 
-    // Remove comments from code
-    code.code = single_line_comment.replace_all(&code.code, "").to_string();
-    code.code = multi_line_comment.replace_all(&code.code, "").to_string();
-
-    for cap in identifiers.captures_iter(&code.code) {
-        tokens.identifiers.insert(cap[0].to_string());
-    }
-
-    for cap in symbols.captures_iter(&code.code) {
-        tokens.symbols.insert(cap[0].to_string());
-    }
-
-    for cap in reserved_words.captures_iter(&code.code) {
-        tokens.reserved_words.insert(cap[0].to_string());
-    }
-
-    for cap in variables.captures_iter(&code.code) {
-        let variable_name = cap[0].to_string();
-        if !tokens.identifiers.contains(&variable_name) && !tokens.reserved_words.contains(&variable_name) {
-            tokens.variables.insert(variable_name);
+    // Capture identifiers, symbols, reserved words, and variables in a single iteration
+    for cap in VARIABLES.captures_iter(&code.code) {
+        let token = cap[0].to_string();
+        if IDENTIFIERS.is_match(&token) {
+            tokens.identifiers.insert(token);
+        } else if SYMBOLS.is_match(&token) {
+            tokens.symbols.insert(token);
+        } else if RESERVED_WORDS.is_match(&token) {
+            tokens.reserved_words.insert(token);
+        } else {
+            tokens.variables.insert(token);
         }
     }
 
-    for cap in lists.captures_iter(&code.code) {
+    // Capture lists
+    for cap in LISTS.captures_iter(&code.code) {
         let list_declaration = cap[1].to_string();
         let list_initialization = cap[0].to_string();
         tokens.lists.insert(list_declaration, list_initialization);
     }
 
-    // Return tokens as JSON file
     Ok(warp::reply::json(&tokens))
 }
