@@ -10,9 +10,10 @@ struct Code {
 
 #[derive(Serialize)]
 struct Tokens {
-    keywords: HashSet<String>,
     identifiers: HashSet<String>,
-    operators: HashSet<String>,
+    symbols: HashSet<String>,
+    reserved_words: HashSet<String>,
+    variables: HashSet<String>,
 }
 
 #[tokio::main]
@@ -28,10 +29,8 @@ async fn main() {
         .allow_methods(vec!["GET", "POST"])
         .allow_headers(vec!["Content-Type"]);
 
-
     // Apply CORS middleware to the API route
     let routes = api_route.with(cors);
-
 
     // Start Warp server
     warp::serve(routes)
@@ -40,28 +39,35 @@ async fn main() {
 }
 
 async fn tokenize_handler(code: Code) -> Result<impl Reply, Rejection> {
-    let keywords = Regex::new(r"\b(if|else|for|while|return)\b").unwrap();
-    let identifiers = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
-    let operators = Regex::new(r"(\+|-|\*|/|%|==|!=|<|>|<=|>=|\|\||&&)").unwrap();
+    let identifiers = Regex::new(r"\b(int|float|string|double|bool|char)\b").unwrap();
+    let symbols = Regex::new(r"[()+\-*/%=;{},|&><!]+").unwrap();
+    let reserved_words = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
+    let variables = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
 
     let mut tokens = Tokens {
-        keywords: HashSet::new(),
         identifiers: HashSet::new(),
-        operators: HashSet::new(),
+        symbols: HashSet::new(),
+        reserved_words: HashSet::new(),
+        variables: HashSet::new(),
     };
 
-    for cap in keywords.captures_iter(&code.code) {
-        tokens.keywords.insert(cap[0].to_string());
-    }
-
     for cap in identifiers.captures_iter(&code.code) {
-        if !tokens.keywords.contains(&cap[0]) {
-            tokens.identifiers.insert(cap[0].to_string());
-        }
+        tokens.identifiers.insert(cap[0].to_string());
     }
 
-    for cap in operators.captures_iter(&code.code) {
-        tokens.operators.insert(cap[0].to_string());
+    for cap in symbols.captures_iter(&code.code) {
+        tokens.symbols.insert(cap[0].to_string());
+    }
+
+    for cap in reserved_words.captures_iter(&code.code) {
+        tokens.reserved_words.insert(cap[0].to_string());
+    }
+
+    for cap in variables.captures_iter(&code.code) {
+        let variable_name = cap[0].to_string();
+        if !tokens.identifiers.contains(&variable_name) && !tokens.reserved_words.contains(&variable_name) {
+            tokens.variables.insert(variable_name);
+        }
     }
 
     // Return tokens as JSON response

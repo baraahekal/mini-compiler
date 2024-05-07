@@ -28,10 +28,10 @@ function Tokenizer() {
                     <h2>Tokenized Data:</h2>
                     <ul>
                         <li>
-                            <h3>Keywords:</h3>
+                            <h3>Symbols:</h3>
                             <ul>
-                                {tokens.keywords.map((keyword, index) => (
-                                    <li key={index}>{keyword}</li>
+                                {tokens.symbols.map((symbol, index) => (
+                                    <li key={index}>{symbol}</li>
                                 ))}
                             </ul>
                         </li>
@@ -44,10 +44,18 @@ function Tokenizer() {
                             </ul>
                         </li>
                         <li>
-                            <h3>Operators:</h3>
+                            <h3>Reserved Keywords:</h3>
                             <ul>
-                                {tokens.operators.map((operator, index) => (
-                                    <li key={index}>{operator}</li>
+                                {tokens.reserved_words.map((reserved_word, index) => (
+                                    <li key={index}>{reserved_word}</li>
+                                ))}
+                            </ul>
+                        </li>
+                        <li>
+                            <h3>Variables:</h3>
+                            <ul>
+                                {tokens.variables.map((variable, index) => (
+                                    <li key={index}>{variable}</li>
                                 ))}
                             </ul>
                         </li>
