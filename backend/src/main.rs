@@ -79,7 +79,7 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         tokens.symbols.insert(token);
     }
 
-    // Capture identifiers, reserved words, and variables in a single iteration
+    // Capture identifier, reserved words, and variables in a single iteration
     for cap in VARIABLES.captures_iter(&code.code) {
         let token = cap[0].to_string();
         if IDENTIFIERS.is_match(&token) {
