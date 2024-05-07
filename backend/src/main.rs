@@ -69,19 +69,24 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     for cap in MULTI_LINE_COMMENT.captures_iter(&code.code) {
         tokens.comments.push(cap[0].to_string());
     }
+
     code.code = SINGLE_LINE_COMMENT.replace_all(&code.code, "").to_string();
     code.code = MULTI_LINE_COMMENT.replace_all(&code.code, "").to_string();
 
-    // Capture identifiers, symbols, reserved words, and variables in a single iteration
+    // Capture symbols
+    for cap in SYMBOLS.captures_iter(&code.code) {
+        let token = cap[0].to_string();
+        tokens.symbols.insert(token);
+    }
+
+    // Capture identifiers, reserved words, and variables in a single iteration
     for cap in VARIABLES.captures_iter(&code.code) {
         let token = cap[0].to_string();
         if IDENTIFIERS.is_match(&token) {
             tokens.identifiers.insert(token);
-        } else if SYMBOLS.is_match(&token) {
-            tokens.symbols.insert(token);
         } else if RESERVED_WORDS.is_match(&token) {
             tokens.reserved_words.insert(token);
-        } else {
+        } else if VARIABLES.is_match(&token){
             tokens.variables.insert(token);
         }
     }

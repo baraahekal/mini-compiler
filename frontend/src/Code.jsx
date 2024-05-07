@@ -1,7 +1,6 @@
 import React from "react";
 import { CodeEditorEditable } from "react-code-editor-editable";
 import "highlight.js/styles/gruvbox-dark.css";
-import {Button} from "@nextui-org/react";
 
 const CodeEditor = ({ code, setCode }) => (
   <CodeEditorEditable

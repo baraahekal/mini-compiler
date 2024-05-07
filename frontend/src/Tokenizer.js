@@ -73,7 +73,7 @@ function Tokenizer() {
                                 <ul>
                                     {Object.entries(tokens.lists).map(([listName, listItems], index) => (
                                         <li key={index}>
-                                            <strong>{listName}:</strong> {listItems.join(', ')}
+                                            <strong>{listName}:</strong> {listItems}
                                         </li>
                                     ))}
                                 </ul>
