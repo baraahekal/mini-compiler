@@ -28,9 +28,9 @@ async fn main() {
         .and_then(tokenize_handler);
 
     let cors = warp::cors()
-        .allow_origin("http://localhost:3000/")
+        .allow_origin("http://localhost:3000")
         .allow_methods(vec!["GET", "POST"])
-        .allow_headers(vec!["Content-Type"]);
+        .allow_headers(vec!["Content-Type"]); // is a header to indicate that request body is JSON
 
     // Apply CORS middleware to the API route
     let routes = api_route.with(cors);
@@ -66,6 +66,7 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     for cap in SINGLE_LINE_COMMENT.captures_iter(&code.code) {
         tokens.comments.push(cap[0].to_string());
     }
+
     for cap in MULTI_LINE_COMMENT.captures_iter(&code.code) {
         tokens.comments.push(cap[0].to_string());
     }

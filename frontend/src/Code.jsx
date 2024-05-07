@@ -1,10 +1,6 @@
 import React from "react";
 import { CodeEditorEditable } from "react-code-editor-editable";
 import "highlight.js/styles/gruvbox-dark.css";
-<<<<<<< HEAD
-=======
-import { Button } from "@nextui-org/react";
->>>>>>> 9a1d92e45b0650117494da24a20124ecfa8b173c
 
 const CodeEditor = ({ code, setCode }) => (
   <div
@@ -23,6 +19,7 @@ const CodeEditor = ({ code, setCode }) => (
       language="cpp"
       inlineNumbers
       caretColor="yellow"
+      tabSize={4}
     />
   </div>
 );
