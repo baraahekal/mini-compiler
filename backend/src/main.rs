@@ -42,7 +42,7 @@ async fn main() {
 
 async fn tokenize_handler(code: Code) -> Result<impl Reply, Rejection> {
     let identifiers = Regex::new(r"\b(int|float|string|double|bool|char)\b").unwrap();
-    let symbols = Regex::new(r"[()+\-*/%=;{},|&><!]+").unwrap();
+    let symbols = Regex::new(r"[()+\-*/%=;{},|&><!]").unwrap();
     let reserved_words = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
     let variables = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
     let lists = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
