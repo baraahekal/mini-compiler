@@ -64,20 +64,30 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         literals: HashMap::new(),
     };
 
-    let mut code_without_comments: String = String::new();
-
-    for line in code.code.lines() {
-        if let Some(mat) = SINGLE_LINE_COMMENT.find(&line) {
-            tokens.comments.push(mat.as_str().to_string());
-        } else if let Some(mat) = MULTI_LINE_COMMENT.find(&line) {
-            tokens.comments.push(mat.as_str().to_string());
-        } else {
-            code_without_comments.push_str(line);
-            code_without_comments.push('\n');
-        }
+    for cap in SINGLE_LINE_COMMENT.captures_iter(&code.code) {
+        tokens.comments.push(cap[0].to_string());
     }
 
-    code.code = code_without_comments;
+    for cap in MULTI_LINE_COMMENT.captures_iter(&code.code) {
+        tokens.comments.push(cap[0].to_string());
+    }
+
+    // Remove comments from code
+    code.code = SINGLE_LINE_COMMENT.replace_all(&code.code, "").to_string();
+    code.code = MULTI_LINE_COMMENT.replace_all(&code.code, "").to_string();
+
+    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
+        if NUMERIC_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "Numeric".to_string());
+        } else if CHARACTER_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "Character".to_string());
+        } else if STRING_LITERAL.is_match(word) {
+            let trimmed_word = word.trim_matches('"').to_string();
+            tokens.literals.insert(trimmed_word.to_string(), "String".to_string());
+        } else if BOOLEAN_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "Boolean".to_string());
+        }
+    }
 
     for cap in SYMBOLS.captures_iter(&code.code) {
         let token = cap[0].to_string();
@@ -90,7 +100,8 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
             tokens.identifiers.insert(token);
         } else if RESERVED_WORDS.is_match(&token) {
             tokens.reserved_words.insert(token);
-        } else if VARIABLES.is_match(&token){
+        } else if !tokens.literals.contains_key(&token) {
+            println!("{}", token);
             tokens.variables.insert(token);
         }
     }
@@ -99,22 +110,6 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         let list_declaration = cap[1].to_string();
         let list_initialization = cap[0].to_string();
         tokens.lists.insert(list_declaration, list_initialization);
-    }
-
-    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
-        if NUMERIC_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "Numeric".to_string());
-        } else if CHARACTER_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "Character".to_string());
-        } else if STRING_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "String".to_string());
-        } else if BOOLEAN_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "Boolean".to_string());
-        }
-    }
-
-    for literal in tokens.literals.keys() {
-        tokens.variables.remove(literal);
     }
 
     println!("{}", tokens.literals.len());
