@@ -53,6 +53,66 @@ lazy_static! {
     static ref BOOLEAN_LITERAL: Regex = Regex::new(r"^(true|false)$").unwrap();
 }
 
+fn process_comments(code: &str, tokens: &mut Tokens) -> String {
+    let mut cleaned_code = String::new();
+    let mut lines = code.lines();
+    let mut in_multi_line_comment = false;
+
+    while let Some(line) = lines.next() {
+        if in_multi_line_comment {
+            if let Some(end) = line.find("*/") {
+                in_multi_line_comment = false;
+                tokens.comments.push(line[..end+2].to_string());
+                if end + 2 < line.len() {
+                    cleaned_code.push_str(&line[end+2..]);
+                    cleaned_code.push('\n');
+                }
+            } else {
+                tokens.comments.push(line.to_string());
+            }
+        } else {
+            if let Some(start) = line.find("/*") {
+                in_multi_line_comment = true;
+                cleaned_code.push_str(&line[..start]);
+                cleaned_code.push('\n');
+                if let Some(end) = line[start..].find("*/") {
+                    in_multi_line_comment = false;
+                    tokens.comments.push(line[start..start+end+2].to_string());
+                    if start + end + 2 < line.len() {
+                        cleaned_code.push_str(&line[start+end+2..]);
+                        cleaned_code.push('\n');
+                    }
+                } else {
+                    tokens.comments.push(line[start..].to_string());
+                }
+            } else if let Some(start) = line.find("//") {
+                tokens.comments.push(line[start..].to_string());
+                cleaned_code.push_str(&line[..start]);
+                cleaned_code.push('\n');
+            } else {
+                cleaned_code.push_str(line);
+                cleaned_code.push('\n');
+            }
+        }
+    }
+
+    cleaned_code
+}
+
+fn process_literals(word: &str) -> Option<(&str, String)> {
+    if word.starts_with('"') && word.ends_with('"') {
+        Some((word.trim_matches('"'), "String".to_string()))
+    } else if word.starts_with('\'') && word.ends_with('\'') && word.len() == 3 {
+        Some((word, "Character".to_string()))
+    } else if word == "true" || word == "false" {
+        Some((word, "Boolean".to_string()))
+    } else if word.parse::<i32>().is_ok() || word.parse::<f64>().is_ok() {
+        Some((word, "Numeric".to_string()))
+    } else {
+        None
+    }
+}
+
 async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     let mut tokens = Tokens {
         identifiers: HashSet::new(),
@@ -64,28 +124,11 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         literals: HashMap::new(),
     };
 
-    for cap in SINGLE_LINE_COMMENT.captures_iter(&code.code) {
-        tokens.comments.push(cap[0].to_string());
-    }
-
-    for cap in MULTI_LINE_COMMENT.captures_iter(&code.code) {
-        tokens.comments.push(cap[0].to_string());
-    }
-
-    // Remove comments from code
-    code.code = SINGLE_LINE_COMMENT.replace_all(&code.code, "").to_string();
-    code.code = MULTI_LINE_COMMENT.replace_all(&code.code, "").to_string();
+    code.code = process_comments(&code.code, &mut tokens);
 
     for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
-        if NUMERIC_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "Numeric".to_string());
-        } else if CHARACTER_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "Character".to_string());
-        } else if STRING_LITERAL.is_match(word) {
-            let trimmed_word = word.trim_matches('"').to_string();
-            tokens.literals.insert(trimmed_word.to_string(), "String".to_string());
-        } else if BOOLEAN_LITERAL.is_match(word) {
-            tokens.literals.insert(word.to_string(), "Boolean".to_string());
+        if let Some((literal, literal_type)) = process_literals(word) {
+            tokens.literals.insert(literal.to_string(), literal_type);
         }
     }
 
