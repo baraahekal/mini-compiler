@@ -7,6 +7,7 @@ function Tokenizer() {
   const [curState, setCurState] = useState(0);
   const [code, setCode] = useState("");
   const [tokens, setTokens] = useState(null);
+  const [showTokenizedData, setShowTokenizedData] = useState(false);
 
   const tokenizeCode = async () => {
     const response = await fetch("http://localhost:3030/tokenize", {
@@ -20,27 +21,36 @@ function Tokenizer() {
     setTokens(data);
   };
   const handleClick = () => {
-    setCurState((prevState) => (prevState === 0 ? 1 : 0));
+      setShowTokenizedData(false);
+      setCurState((prevState) => (prevState === 0 ? 1 : 0));
 
-    const button = document.querySelector(".dsButtonAnim");
+      const button = document.querySelector(".dsButtonAnim");
 
-    if (button.classList.contains("success")) {
-      button.classList.remove("success");
-    } else if (button.classList.contains("error")) {
-      button.classList.remove("error");
-    } else {
-      button.classList.add("loading");
+      if (button.classList.contains("success")) {
+        button.classList.remove("success");
+      } else if (button.classList.contains("error")) {
+        button.classList.remove("error");
+      } else {
+        button.classList.add("loading");
 
+        setTimeout(() => {
+          button.classList.remove("loading");
+          button.classList.add("success");  
+
+          // Remove the success class after 2 seconds
+          setTimeout(() => {
+            button.classList.remove("success");
+            setShowTokenizedData(true);
+            tokenizeCode();
+          }, 1000);
+
+          
+        }, 1500);
+      }
       setTimeout(() => {
-        button.classList.remove("loading");
-        button.classList.add(curState === 0 ? "success" : "success");
-        tokenizeCode();
-      }, 1500);
-    }
-    setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-    }, 2300);
-  };
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      }, 2300);
+    };
 
   return (
     <div>
@@ -56,11 +66,11 @@ function Tokenizer() {
         </button> */}
         <div class="buttonContainer">
           <div class="dsButtonAnim" onClick={handleClick}>
-            <span>Toknize me</span>
+            <span>Toknize</span>
           </div>
         </div>
 
-        {tokens && (
+        {showTokenizedData && tokens && (
           <div className="tokenized-data">
             <h2>Tokenized Data</h2>
             <ul className="toknized-list">
