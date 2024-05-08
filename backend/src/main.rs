@@ -113,6 +113,39 @@ fn process_literals(word: &str) -> Option<(&str, String)> {
     }
 }
 
+fn process_symbols(code: &str, tokens: &mut Tokens) {
+    let symbols = vec!["&&", "||", "(", ")", "+", "-", "*", "/", "%", "=", ";", "{", "}", ",", "|", "&", ">", "<", "!"];
+
+    for symbol in symbols {
+        for word in code.split_whitespace() {
+            if word.contains(symbol) {
+                tokens.symbols.insert(symbol.to_string());
+            }
+        }
+    }
+}
+
+fn process_identifiers_and_reserved_words(word: &str) -> Option<(&str, String)> {
+    let identifiers = vec!["void", "int", "float", "string", "double", "bool", "char"];
+    let reserved_words = vec!["for", "while", "return", "end", "if", "do", "break", "continue"];
+
+    if identifiers.contains(&word) {
+        Some((word, "Identifier".to_string()))
+    } else if reserved_words.contains(&word) {
+        Some((word, "Reserved Word".to_string()))
+    } else {
+        None
+    }
+}
+
+fn process_variables(word: &str) -> Option<(&str, String)> {
+    if word.chars().all(|c| c.is_alphanumeric() || c == '_') && word.chars().next().unwrap().is_alphabetic() {
+        Some((word, "Variable".to_string()))
+    } else {
+        None
+    }
+}
+
 async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     let mut tokens = Tokens {
         identifiers: HashSet::new(),
@@ -132,6 +165,8 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         }
     }
 
+    process_symbols(&code.code, &mut tokens);
+
     for cap in SYMBOLS.captures_iter(&code.code) {
         let token = cap[0].to_string();
         tokens.symbols.insert(token);
@@ -144,7 +179,6 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         } else if RESERVED_WORDS.is_match(&token) {
             tokens.reserved_words.insert(token);
         } else if !tokens.literals.contains_key(&token) {
-            println!("{}", token);
             tokens.variables.insert(token);
         }
     }
