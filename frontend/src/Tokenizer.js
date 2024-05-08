@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import CodeEditor from "./Code";
-import { Button } from "@nextui-org/react";
 import "./Tokenizer.css";
 import icon from "./icon.svg";
-import ClipLoader from "react-spinners/ClipLoader";
 
 function Tokenizer() {
   const [curState, setCurState] = useState(0);
@@ -41,7 +39,7 @@ function Tokenizer() {
     }
     setTimeout(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-    }, 2000);
+    }, 2300);
   };
 
   return (
