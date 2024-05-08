@@ -116,6 +116,21 @@ function Tokenizer() {
                   </ul>
                 </li>
               )}
+              {Object.entries(tokens.literals).length > 0 && (
+                <li>
+                  <h3>Literals</h3>
+                  <ul className="toknized-single">
+                   
+                    {Object.entries(tokens.literals).map(
+                      ([listName, listItems], index) => (
+                        <li key={index}>
+                          <strong>{listName}:</strong> {listItems}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </li>
+              )}
               {Object.entries(tokens.lists).length > 0 && (
                 <li>
                   <h3>Lists</h3>

@@ -17,11 +17,11 @@ struct Tokens {
     variables: HashSet<String>,
     lists: HashMap<String, String>,
     comments: Vec<String>,
+    literals: HashMap<String, String>,
 }
 
 #[tokio::main]
 async fn main() {
-    // Define route for API
     let api_route = warp::path("tokenize")
         .and(warp::post())
         .and(warp::body::json())
@@ -30,26 +30,27 @@ async fn main() {
     let cors = warp::cors()
         .allow_origin("http://localhost:3000")
         .allow_methods(vec!["GET", "POST"])
-        .allow_headers(vec!["Content-Type"]); // is a header to indicate that request body is JSON
+        .allow_headers(vec!["Content-Type"]);
 
-    // Apply CORS middleware to the API route
     let routes = api_route.with(cors);
 
-    // Start the server
     warp::serve(routes)
         .run(([127, 0, 0, 1], 3030))
         .await;
 }
 
-// Compile regular expressions once
 lazy_static! {
-    static ref IDENTIFIERS: Regex = Regex::new(r"\b(int|float|string|double|bool|char)\b").unwrap();
+    static ref IDENTIFIERS: Regex = Regex::new(r"\b(void|int|float|string|double|bool|char)\b").unwrap();
     static ref SYMBOLS: Regex = Regex::new(r"(&&|\|\||[()+\-*/%=;{},|&><!])").unwrap();
     static ref RESERVED_WORDS: Regex = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
-    static ref VARIABLES: Regex = Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b").unwrap();
+    static ref VARIABLES: Regex = Regex::new(r"\b[a-zA-Z_]\w*\b").unwrap();
     static ref LISTS: Regex = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
     static ref SINGLE_LINE_COMMENT: Regex = Regex::new(r"(?://[^\n]*)").unwrap();
     static ref MULTI_LINE_COMMENT: Regex = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
+    static ref NUMERIC_LITERAL: Regex = Regex::new(r"^\d+(\.\d+)?$").unwrap();
+    static ref CHARACTER_LITERAL: Regex = Regex::new(r"^'.'$").unwrap();
+    static ref STRING_LITERAL: Regex = Regex::new(r#"^".*"$"#).unwrap();
+    static ref BOOLEAN_LITERAL: Regex = Regex::new(r"^(true|false)$").unwrap();
 }
 
 async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
@@ -60,27 +61,29 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         variables: HashSet::new(),
         lists: HashMap::new(),
         comments: Vec::new(),
+        literals: HashMap::new(),
     };
 
-    // Store and remove comments
-    for cap in SINGLE_LINE_COMMENT.captures_iter(&code.code) {
-        tokens.comments.push(cap[0].to_string());
+    let mut code_without_comments: String = String::new();
+
+    for line in code.code.lines() {
+        if let Some(mat) = SINGLE_LINE_COMMENT.find(&line) {
+            tokens.comments.push(mat.as_str().to_string());
+        } else if let Some(mat) = MULTI_LINE_COMMENT.find(&line) {
+            tokens.comments.push(mat.as_str().to_string());
+        } else {
+            code_without_comments.push_str(line);
+            code_without_comments.push('\n');
+        }
     }
 
-    for cap in MULTI_LINE_COMMENT.captures_iter(&code.code) {
-        tokens.comments.push(cap[0].to_string());
-    }
+    code.code = code_without_comments;
 
-    code.code = SINGLE_LINE_COMMENT.replace_all(&code.code, "").to_string();
-    code.code = MULTI_LINE_COMMENT.replace_all(&code.code, "").to_string();
-
-    // Capture symbols
     for cap in SYMBOLS.captures_iter(&code.code) {
         let token = cap[0].to_string();
         tokens.symbols.insert(token);
     }
 
-    // Capture identifier, reserved words, and variables in a single iteration
     for cap in VARIABLES.captures_iter(&code.code) {
         let token = cap[0].to_string();
         if IDENTIFIERS.is_match(&token) {
@@ -92,12 +95,29 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         }
     }
 
-    // Capture lists
     for cap in LISTS.captures_iter(&code.code) {
         let list_declaration = cap[1].to_string();
         let list_initialization = cap[0].to_string();
         tokens.lists.insert(list_declaration, list_initialization);
     }
+
+    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
+        if NUMERIC_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "Numeric".to_string());
+        } else if CHARACTER_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "Character".to_string());
+        } else if STRING_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "String".to_string());
+        } else if BOOLEAN_LITERAL.is_match(word) {
+            tokens.literals.insert(word.to_string(), "Boolean".to_string());
+        }
+    }
+
+    for literal in tokens.literals.keys() {
+        tokens.variables.remove(literal);
+    }
+
+    println!("{}", tokens.literals.len());
 
     Ok(warp::reply::json(&tokens))
 }
