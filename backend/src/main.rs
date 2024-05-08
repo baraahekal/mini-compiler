@@ -44,7 +44,6 @@ lazy_static! {
     static ref SYMBOLS: Regex = Regex::new(r"(&&|\|\||[()+\-*/%=;{},|&><!])").unwrap();
     static ref RESERVED_WORDS: Regex = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
     static ref VARIABLES: Regex = Regex::new(r"\b[a-zA-Z_]\w*\b").unwrap();
-    static ref LISTS: Regex = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
     static ref SINGLE_LINE_COMMENT: Regex = Regex::new(r"(?://[^\n]*)").unwrap();
     static ref MULTI_LINE_COMMENT: Regex = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
     static ref NUMERIC_LITERAL: Regex = Regex::new(r"^\d+(\.\d+)?$").unwrap();
@@ -145,8 +144,29 @@ fn process_variables(word: &str) -> Option<(&str, String)> {
         None
     }
 }
+fn process_lists(code: &str, tokens: &mut Tokens) -> String {
+    let mut cleaned_code = String::new();
+    let mut lines = code.lines();
 
-async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
+    while let Some(line) = lines.next() {
+        if line.contains("[") && line.contains("]") && line.contains("{") && line.contains("}") {
+            let parts: Vec<&str> = line.split("{").collect();
+            if parts.len() == 2 {
+                let list_declaration = parts[0].trim().trim_end_matches("=").trim().to_string();
+                let list_initialization = format!("{{{}}}", parts[1].trim_end_matches("}").trim());
+                tokens.lists.insert(list_declaration, list_initialization);
+            } else {
+                cleaned_code.push_str(line);
+                cleaned_code.push('\n');
+            }
+        } else {
+            cleaned_code.push_str(line);
+            cleaned_code.push('\n');
+        }
+    }
+
+    cleaned_code
+}async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     let mut tokens = Tokens {
         identifiers: HashSet::new(),
         symbols: HashSet::new(),
@@ -182,12 +202,9 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
             tokens.variables.insert(token);
         }
     }
+    code.code = process_lists(&code.code, &mut tokens);
 
-    for cap in LISTS.captures_iter(&code.code) {
-        let list_declaration = cap[1].to_string();
-        let list_initialization = cap[0].to_string();
-        tokens.lists.insert(list_declaration, list_initialization);
-    }
+   
 
     println!("{}", tokens.literals.len());
 
