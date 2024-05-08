@@ -1,8 +1,6 @@
 use warp::{Filter, Rejection, Reply};
 use serde::{Serialize, Deserialize};
-use regex::Regex;
 use std::collections::{HashSet, HashMap};
-use lazy_static::lazy_static;
 
 #[derive(Deserialize)]
 struct Code {
@@ -38,20 +36,7 @@ async fn main() {
         .run(([127, 0, 0, 1], 3030))
         .await;
 }
-
-lazy_static! {
-    static ref IDENTIFIERS: Regex = Regex::new(r"\b(void|int|float|string|double|bool|char)\b").unwrap();
-    static ref SYMBOLS: Regex = Regex::new(r"(&&|\|\||[()+\-*/%=;{},|&><!])").unwrap();
-    static ref RESERVED_WORDS: Regex = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
-    static ref VARIABLES: Regex = Regex::new(r"\b[a-zA-Z_]\w*\b").unwrap();
-    static ref SINGLE_LINE_COMMENT: Regex = Regex::new(r"(?://[^\n]*)").unwrap();
-    static ref MULTI_LINE_COMMENT: Regex = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
-    static ref NUMERIC_LITERAL: Regex = Regex::new(r"^\d+(\.\d+)?$").unwrap();
-    static ref CHARACTER_LITERAL: Regex = Regex::new(r"^'.'$").unwrap();
-    static ref STRING_LITERAL: Regex = Regex::new(r#"^".*"$"#).unwrap();
-    static ref BOOLEAN_LITERAL: Regex = Regex::new(r"^(true|false)$").unwrap();
-}
-
+ 
 fn process_comments(code: &str, tokens: &mut Tokens) -> String {
     let mut cleaned_code = String::new();
     let mut lines = code.lines();
@@ -138,12 +123,13 @@ fn process_identifiers_and_reserved_words(word: &str) -> Option<(&str, String)> 
 }
 
 fn process_variables(word: &str) -> Option<(&str, String)> {
-    if word.chars().all(|c| c.is_alphanumeric() || c == '_') && word.chars().next().unwrap().is_alphabetic() {
+    if word.chars().all(|c| c.is_alphanumeric() || c == '_') && (word.chars().next().unwrap_or_default().is_alphabetic() || word.starts_with('_')) {
         Some((word, "Variable".to_string()))
     } else {
         None
     }
 }
+
 fn process_lists(code: &str, tokens: &mut Tokens) -> String {
     let mut cleaned_code = String::new();
     let mut lines = code.lines();
@@ -153,7 +139,9 @@ fn process_lists(code: &str, tokens: &mut Tokens) -> String {
             let parts: Vec<&str> = line.split("{").collect();
             if parts.len() == 2 {
                 let list_declaration = parts[0].trim().trim_end_matches("=").trim().to_string();
-                let list_initialization = format!("{{{}}}", parts[1].trim_end_matches("}").trim());
+                let list_elements: Vec<&str> = parts[1].trim_end_matches("}").trim_end_matches(";").trim().split(',').collect();
+                let list_length = list_elements.len();
+                let list_initialization = format!("{{{} (length: {})", parts[1].trim_end_matches("}").trim_end_matches(";").trim(), list_length);
                 tokens.lists.insert(list_declaration, list_initialization);
             } else {
                 cleaned_code.push_str(line);
@@ -166,7 +154,9 @@ fn process_lists(code: &str, tokens: &mut Tokens) -> String {
     }
 
     cleaned_code
-}async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
+}    
+
+async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     let mut tokens = Tokens {
         identifiers: HashSet::new(),
         symbols: HashSet::new(),
@@ -187,26 +177,19 @@ fn process_lists(code: &str, tokens: &mut Tokens) -> String {
 
     process_symbols(&code.code, &mut tokens);
 
-    for cap in SYMBOLS.captures_iter(&code.code) {
-        let token = cap[0].to_string();
-        tokens.symbols.insert(token);
-    }
-
-    for cap in VARIABLES.captures_iter(&code.code) {
-        let token = cap[0].to_string();
-        if IDENTIFIERS.is_match(&token) {
-            tokens.identifiers.insert(token);
-        } else if RESERVED_WORDS.is_match(&token) {
-            tokens.reserved_words.insert(token);
-        } else if !tokens.literals.contains_key(&token) {
-            tokens.variables.insert(token);
+    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
+        if let Some((token, token_type)) = process_identifiers_and_reserved_words(word) {
+            match token_type.as_str() {
+                "Identifier" => { let _ = tokens.identifiers.insert(token.to_string()); },
+                "Reserved Word" => { let _ = tokens.reserved_words.insert(token.to_string()); },
+                _ => (),
+            }
+        } else if let Some((token, _)) = process_variables(word) {
+            let _ = tokens.variables.insert(token.to_string());
         }
     }
+    
     code.code = process_lists(&code.code, &mut tokens);
-
-   
-
-    println!("{}", tokens.literals.len());
 
     Ok(warp::reply::json(&tokens))
 }
