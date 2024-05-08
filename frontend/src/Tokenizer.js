@@ -3,8 +3,10 @@ import CodeEditor from "./Code";
 import { Button } from "@nextui-org/react";
 import "./Tokenizer.css";
 import icon from "./icon.svg";
+import ClipLoader from "react-spinners/ClipLoader";
 
 function Tokenizer() {
+  const [curState, setCurState] = useState(0);
   const [code, setCode] = useState("");
   const [tokens, setTokens] = useState(null);
 
@@ -19,6 +21,28 @@ function Tokenizer() {
     const data = await response.json();
     setTokens(data);
   };
+  const handleClick = () => {
+    setCurState((prevState) => (prevState === 0 ? 1 : 0));
+
+    const button = document.querySelector(".dsButtonAnim");
+
+    if (button.classList.contains("success")) {
+      button.classList.remove("success");
+    } else if (button.classList.contains("error")) {
+      button.classList.remove("error");
+    } else {
+      button.classList.add("loading");
+
+      setTimeout(() => {
+        button.classList.remove("loading");
+        button.classList.add(curState === 0 ? "success" : "success");
+        tokenizeCode();
+      }, 1500);
+    }
+    setTimeout(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }, 2000);
+  };
 
   return (
     <div>
@@ -29,9 +53,15 @@ function Tokenizer() {
       <div className="tokenizer-container">
         <h2>Please Write Your Code here</h2>
         <CodeEditor code={code} setCode={setCode} className="code-editor" />
-        <button className="Button" onClick={tokenizeCode}>
+        {/* <button className="Button" onClick={tokenizeCode}>
           Tokenize
-        </button>
+        </button> */}
+        <div class="buttonContainer">
+          <div class="dsButtonAnim" onClick={handleClick}>
+            <span>Toknize me</span>
+          </div>
+        </div>
+
         {tokens && (
           <div className="tokenized-data">
             <h2>Tokenized Data</h2>
