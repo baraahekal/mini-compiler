@@ -157,11 +157,6 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
 
     process_symbols(&code.code, &mut tokens);
 
-    for cap in SYMBOLS.captures_iter(&code.code) {
-        let token = cap[0].to_string();
-        tokens.symbols.insert(token);
-    }
-
     for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
         if let Some((token, token_type)) = process_identifiers_and_reserved_words(word) {
             match token_type.as_str() {
@@ -179,8 +174,6 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         let list_initialization = cap[0].to_string();
         tokens.lists.insert(list_declaration, list_initialization);
     }
-
-    println!("{}", tokens.literals.len());
 
     Ok(warp::reply::json(&tokens))
 }
