@@ -40,17 +40,7 @@ async fn main() {
 }
 
 lazy_static! {
-    static ref IDENTIFIERS: Regex = Regex::new(r"\b(void|int|float|string|double|bool|char)\b").unwrap();
-    static ref SYMBOLS: Regex = Regex::new(r"(&&|\|\||[()+\-*/%=;{},|&><!])").unwrap();
-    static ref RESERVED_WORDS: Regex = Regex::new(r"\b(for|while|return|end|if|do|break|continue)\b").unwrap();
-    static ref VARIABLES: Regex = Regex::new(r"\b[a-zA-Z_]\w*\b").unwrap();
     static ref LISTS: Regex = Regex::new(r"(\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*[a-zA-Z0-9_]*\s*\])\s*(=\s*)?\{([a-zA-Z0-9_,\s]*)\}").unwrap();
-    static ref SINGLE_LINE_COMMENT: Regex = Regex::new(r"(?://[^\n]*)").unwrap();
-    static ref MULTI_LINE_COMMENT: Regex = Regex::new(r"/\*(.|\n)*?\*/").unwrap();
-    static ref NUMERIC_LITERAL: Regex = Regex::new(r"^\d+(\.\d+)?$").unwrap();
-    static ref CHARACTER_LITERAL: Regex = Regex::new(r"^'.'$").unwrap();
-    static ref STRING_LITERAL: Regex = Regex::new(r#"^".*"$"#).unwrap();
-    static ref BOOLEAN_LITERAL: Regex = Regex::new(r"^(true|false)$").unwrap();
 }
 
 fn process_comments(code: &str, tokens: &mut Tokens) -> String {
@@ -139,7 +129,7 @@ fn process_identifiers_and_reserved_words(word: &str) -> Option<(&str, String)> 
 }
 
 fn process_variables(word: &str) -> Option<(&str, String)> {
-    if word.chars().all(|c| c.is_alphanumeric() || c == '_') && word.chars().next().unwrap().is_alphabetic() {
+    if word.chars().all(|c| c.is_alphanumeric() || c == '_') && (word.chars().next().unwrap_or_default().is_alphabetic() || word.starts_with('_')) {
         Some((word, "Variable".to_string()))
     } else {
         None
@@ -172,14 +162,15 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
         tokens.symbols.insert(token);
     }
 
-    for cap in VARIABLES.captures_iter(&code.code) {
-        let token = cap[0].to_string();
-        if IDENTIFIERS.is_match(&token) {
-            tokens.identifiers.insert(token);
-        } else if RESERVED_WORDS.is_match(&token) {
-            tokens.reserved_words.insert(token);
-        } else if !tokens.literals.contains_key(&token) {
-            tokens.variables.insert(token);
+    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
+        if let Some((token, token_type)) = process_identifiers_and_reserved_words(word) {
+            match token_type.as_str() {
+                "Identifier" => { let _ = tokens.identifiers.insert(token.to_string()); },
+                "Reserved Word" => { let _ = tokens.reserved_words.insert(token.to_string()); },
+                _ => (),
+            }
+        } else if let Some((token, _)) = process_variables(word) {
+            let _ = tokens.variables.insert(token.to_string());
         }
     }
 
