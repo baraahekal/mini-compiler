@@ -157,9 +157,13 @@ fn process_lists(code: &str, tokens: &mut Tokens) -> String {
             let parts: Vec<&str> = line.split("{").collect();
             if parts.len() == 2 {
                 let list_declaration = parts[0].trim().trim_end_matches("=").trim().to_string();
-                let list_elements: Vec<&str> = parts[1].trim_end_matches("}").trim_end_matches(";").trim().split(',').collect();
-                let list_length = list_elements.len();
-                let list_initialization = format!("{{{} (length: {})", parts[1].trim_end_matches("}").trim_end_matches(";").trim(), list_length);
+                let list_initialization_part = parts[1].trim_end_matches("}").trim_end_matches(";").trim();
+                let list_length = if list_initialization_part.starts_with("}") {
+                    0
+                } else {
+                    list_initialization_part.split(',').count()
+                };
+                let list_initialization = format!("{{{} (length: {})", list_initialization_part, list_length);
                 tokens.lists.insert(list_declaration, list_initialization);
             } else {
                 cleaned_code.push_str(line);
