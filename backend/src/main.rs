@@ -98,24 +98,26 @@ fn process_literals(word: &str) -> Option<(&str, String)> {
 }
 
 fn process_symbols(code: &str, tokens: &mut Tokens) {
-    let symbols = vec!["&&", "||", "(", ")", "+", "-", "*", "/", "%", "=", ";", "{", "}", ",", "|", "&", ">", "<", "!"];
+    let symbols: HashSet<char> = ['(', ')', '+', '-', '*', '/', '%', '=', ';', '{', '}', ',', '|', '&', '>', '<', '!'].iter().cloned().collect();
 
-    for symbol in symbols {
-        for word in code.split_whitespace() {
-            if word.contains(symbol) {
-                tokens.symbols.insert(symbol.to_string());
-            }
+    let chars: Vec<char> = code.chars().collect();
+    for i in 0..chars.len() {
+        if (chars[i] == '&') && i + 1 < chars.len() && chars[i] == chars[i + 1] || (chars[i] == '|') && i + 1 < chars.len() && chars[i] == chars[i + 1] {
+            tokens.symbols.insert(format!("{}{}", chars[i], chars[i]));
+        }
+        else if symbols.contains(&chars[i]) && i > 0 &&chars[i - 1] != chars[i] {
+            tokens.symbols.insert(chars[i].to_string());
         }
     }
 }
 
 fn process_identifiers_and_reserved_words(word: &str) -> Option<(&str, String)> {
-    let identifiers = vec!["void", "int", "float", "string", "double", "bool", "char"];
-    let reserved_words = vec!["for", "while", "return", "end", "if", "do", "break", "continue"];
+    let identifiers: HashSet<&str> = ["void", "int", "float", "string", "double", "bool", "char"].iter().cloned().collect();
+    let reserved_words: HashSet<&str> = ["for", "while", "return", "end", "if", "do", "break", "continue"].iter().cloned().collect();
 
-    if identifiers.contains(&word) {
+    if identifiers.contains(word) {
         Some((word, "Identifier".to_string()))
-    } else if reserved_words.contains(&word) {
+    } else if reserved_words.contains(word) {
         Some((word, "Reserved Word".to_string()))
     } else {
         None
