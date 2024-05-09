@@ -105,7 +105,7 @@ fn process_symbols(code: &str, tokens: &mut Tokens) {
         if (chars[i] == '&') && i + 1 < chars.len() && chars[i] == chars[i + 1] || (chars[i] == '|') && i + 1 < chars.len() && chars[i] == chars[i + 1] {
             tokens.symbols.insert(format!("{}{}", chars[i], chars[i]));
         }
-        else if symbols.contains(&chars[i]) && i > 0 &&chars[i - 1] != chars[i] {
+        else if symbols.contains(&chars[i]) && i > 0 && chars[i - 1] != chars[i] {
             tokens.symbols.insert(chars[i].to_string());
         }
     }
@@ -124,9 +124,25 @@ fn process_identifiers_and_reserved_words(word: &str) -> Option<(&str, String)> 
     }
 }
 
-fn process_variables(word: &str) -> Option<(&str, String)> {
-    if word.chars().all(|c| c.is_alphanumeric() || c == '_') && (word.chars().next().unwrap_or_default().is_alphabetic() || word.starts_with('_')) {
-        Some((word, "Variable".to_string()))
+fn process_variables(word: &str) -> Option<(String, String)> {
+    println!("word: {}", word);
+    use regex::Regex;
+    // word.chars().next().unwrap_or_default().is_alphabetic()
+    let mut variable_part = word.trim().to_string();
+    println!("variable_part1: {}", variable_part);
+
+    let symbols: Vec<char> = ['(', ')', '+', '-', '*', '/', '%', '=', ';', '{', '}', ',', '|', '&', '>', '<', '!'].to_vec();
+    for symbol in symbols {
+        variable_part = variable_part.replace(symbol, " ");
+    }
+    println!("variable_part2: {}", variable_part);
+
+    let parts: Vec<&str> = variable_part.split(' ').collect();
+    variable_part = parts[0].trim().to_string();
+    println!("variable_part3: {}", variable_part);
+
+    if Regex::new(r"^[a-zA-Z]").unwrap().is_match(&variable_part) || variable_part.starts_with('_') {
+        Some((variable_part, "Variable".to_string()))
     } else {
         None
     }
@@ -156,7 +172,7 @@ fn process_lists(code: &str, tokens: &mut Tokens) -> String {
     }
 
     cleaned_code
-}    
+}
 
 async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
     let mut tokens = Tokens {
@@ -171,7 +187,7 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
 
     code.code = process_comments(&code.code, &mut tokens);
 
-    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
+    for word in code.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '"') {
         if let Some((literal, literal_type)) = process_literals(word) {
             tokens.literals.insert(literal.to_string(), literal_type);
         }
@@ -179,7 +195,7 @@ async fn tokenize_handler(mut code: Code) -> Result<impl Reply, Rejection> {
 
     process_symbols(&code.code, &mut tokens);
 
-    for word in code.code.split(|c: char| c.is_whitespace() || c == ';') {
+    for word in code.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '"' || c == '\'') {
         if let Some((token, token_type)) = process_identifiers_and_reserved_words(word) {
             match token_type.as_str() {
                 "Identifier" => { let _ = tokens.identifiers.insert(token.to_string()); },
