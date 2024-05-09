@@ -4,6 +4,7 @@ import "./Tokenizer.css";
 import icon from "./icon.svg";
 
 function Tokenizer() {
+  const [curState, setCurState] = useState(0);
   const [code, setCode] = useState("");
   const [tokens, setTokens] = useState(null);
   const [showTokenizedData, setShowTokenizedData] = useState(false);
@@ -60,6 +61,9 @@ function Tokenizer() {
       <div className="tokenizer-container">
         <h2>Please Write Your Code here</h2>
         <CodeEditor code={code} setCode={setCode} className="code-editor" />
+        {/* <button className="Button" onClick={tokenizeCode}>
+          Tokenize
+        </button> */}
         <div class="buttonContainer">
           <div class="dsButtonAnim" onClick={handleClick}>
             <span>Toknize</span>
