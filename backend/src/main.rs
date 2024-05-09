@@ -119,9 +119,9 @@ impl Scanner {
 
         for word in self.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '"' || c == '\'') {
             if identifiers.contains(word) {
-                let _ = self.tokens.identifiers.insert(word.to_string());
+                self.tokens.identifiers.insert(word.to_string());
             } else if reserved_words.contains(word) {
-                let _ = self.tokens.reserved_words.insert(word.to_string());
+                self.tokens.reserved_words.insert(word.to_string());
             }
         }
     }
@@ -129,32 +129,23 @@ impl Scanner {
     fn process_variables(&mut self) {
         use regex::Regex;
         for word in self.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '\'') {
-            let mut variable_part = word.trim().to_string();
-
-            let symbols: Vec<char> = ['(', ')', '+', '-', '*', '/', '%', '=', ';', '{', '}', ',', '|', '&', '>', '<', '!'].to_vec();
-            for symbol in symbols {
-                variable_part = variable_part.replace(symbol, " ");
-            }
-
-            let parts: Vec<&str> = variable_part.split(' ').collect();
-            variable_part = parts[0].trim().to_string();
+            let variable_part = word.trim().to_string();
 
             // Check if the word is not an identifier or reserved word before classifying it as a variable // word.chars().next().unwrap_or_default().is_alphabetic()
             if !self.tokens.identifiers.contains(&variable_part) && !self.tokens.reserved_words.contains(&variable_part) && (Regex::new(r"^[a-zA-Z]").unwrap().is_match(&variable_part) || variable_part.starts_with('_')) {
-                let _ = self.tokens.variables.insert(variable_part);
+                self.tokens.variables.insert(variable_part);
             }
         }
     }
 
     fn process_lists(&mut self) {
-        let mut cleaned_code = String::new();
         let mut lines = self.code.lines();
 
         while let Some(line) = lines.next() {
             if line.contains("[") && line.contains("]") && line.contains("{") && line.contains("}") {
                 let parts: Vec<&str> = line.split("{").collect();
-                if parts.len() == 2 {
-                    let list_declaration = parts[0].trim().trim_end_matches("=").trim().to_string();
+
+                    let list_declaration = parts[0].trim_end_matches("=").trim();
                     let list_initialization_part = parts[1].trim_end_matches("}").trim_end_matches(";").trim();
                     let list_length = if list_initialization_part.starts_with("}") {
                         0
@@ -162,18 +153,10 @@ impl Scanner {
                         list_initialization_part.split(',').count()
                     };
                     let list_initialization = format!("{{{} (length: {})", list_initialization_part, list_length);
-                    self.tokens.lists.insert(list_declaration, list_initialization);
-                } else {
-                    cleaned_code.push_str(line);
-                    cleaned_code.push('\n');
-                }
-            } else {
-                cleaned_code.push_str(line);
-                cleaned_code.push('\n');
+                    self.tokens.lists.insert(list_declaration.to_string(), list_initialization);
+
             }
         }
-
-        self.code = cleaned_code;
     }
 
     fn scan(&mut self) -> Tokens {
@@ -184,7 +167,7 @@ impl Scanner {
         self.process_variables();
         self.process_lists();
 
-        self.tokens.clone()
+        return self.tokens.clone()
     }
 }
 
