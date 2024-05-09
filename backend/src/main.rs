@@ -1,6 +1,8 @@
 use warp::{Filter, Rejection, Reply};
 use serde::{Serialize, Deserialize};
 use std::collections::{HashSet, HashMap};
+#[cfg(test)]
+mod tests;
 
 #[derive(Deserialize)]
 struct Code {
@@ -18,7 +20,7 @@ struct Tokens {
     literals: HashMap<String, String>,
 }
 
-struct Scanner {
+pub struct Scanner {
     code: String,
     tokens: Tokens,
 }
@@ -48,11 +50,10 @@ impl Scanner {
             if in_multi_line_comment {
                 if let Some(end) = line.find("*/") {
                     in_multi_line_comment = false;
-                    self.tokens.comments.push(line[..end+2].to_string());
-                    if end + 2 < line.len() {
-                        cleaned_code.push_str(&line[end+2..]);
-                        cleaned_code.push('\n');
-                    }
+                    self.tokens.comments.push(line[..end + 2].to_string());
+
+                    cleaned_code.push_str(&line[end + 2..]);
+                    cleaned_code.push(' ');
                 } else {
                     self.tokens.comments.push(line.to_string());
                 }
@@ -60,21 +61,20 @@ impl Scanner {
                 if let Some(start) = line.find("/*") {
                     in_multi_line_comment = true;
                     cleaned_code.push_str(&line[..start]);
-                    cleaned_code.push('\n');
-                    if let Some(end) = line[start..].find("*/") {
+                    cleaned_code.push(' ');
+                    if let Some(end) = line.find("*/") {
                         in_multi_line_comment = false;
-                        self.tokens.comments.push(line[start..start+end+2].to_string());
-                        if start + end + 2 < line.len() {
-                            cleaned_code.push_str(&line[start+end+2..]);
-                            cleaned_code.push('\n');
-                        }
+                        self.tokens.comments.push(line[start..end + 2].to_string());
+
+                        cleaned_code.push_str(&line[end + 2..]);
+                        cleaned_code.push(' ');
                     } else {
                         self.tokens.comments.push(line[start..].to_string());
                     }
                 } else if let Some(start) = line.find("//") {
                     self.tokens.comments.push(line[start..].to_string());
                     cleaned_code.push_str(&line[..start]);
-                    cleaned_code.push('\n');
+                    cleaned_code.push(' ');
                 } else {
                     cleaned_code.push_str(line);
                     cleaned_code.push('\n');
@@ -127,6 +127,7 @@ impl Scanner {
     }
 
     fn process_variables(&mut self) {
+        self.process_identifiers_and_reserved_words();
         use regex::Regex;
         for word in self.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '\'') {
             let variable_part = word.trim().to_string();
