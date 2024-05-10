@@ -1,16 +1,14 @@
 import React, { useRef } from 'react'; 
 import Editor from '@monaco-editor/react';
 
+
 const CodeEditor = ({ code, setCode }) => {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
 
   const options = {
-    selectOnLineNumbers: true,
-    roundedSelection: false,
-    readOnly: false,
-    cursorStyle: 'line',
-    automaticLayout: false,
+    fontSize: 14,
+    // fontFamily: 'Courier New',
   };
 
   const compileCode = async () => {
@@ -27,6 +25,25 @@ const CodeEditor = ({ code, setCode }) => {
   const editorDidMount = (editor, monaco) => {
     console.log('editorDidMount', editor);
     editor.focus();
+
+    monaco.editor.defineTheme('gruvbox-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '7c6f64' },
+        { token: 'string', foreground: 'b8bb26' },
+        { token: 'keyword', foreground: 'fb4934' },
+        { token: 'number', foreground: 'd3869b' },
+      ],
+      colors: {
+        'editor.foreground': '#ebdbb2',
+        'editor.background': '#282828',
+        'editorCursor.foreground': '#ebdbb2',
+        // 'editor.lineHighlightBackground': '#3c3836',
+      },
+    });
+    monaco.editor.setTheme('gruvbox-dark');
+
     editorRef.current = editor;
     monacoRef.current = monaco;
     compileCode();
@@ -40,16 +57,17 @@ const CodeEditor = ({ code, setCode }) => {
 
   return (
     <>
+      {/* <div style={{ borderRadius: '10px', overflow: 'hidden' }}> */}
       <Editor
+        onMount={editorDidMount}
         height={window.innerHeight / 2}
         width={window.innerWidth / 2}
         defaultLanguage="cpp"
-        theme="vs-dark"
         defaultValue={code}
-        // options={options}
+        options={options}
         onChange={onChange}
-        onMount={editorDidMount}
       />
+    {/* </div> */}
     </>
     
   );
