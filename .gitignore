@@ -1,5 +1,8 @@
 # Node / npm
 frontend/node_modules/
+node_modules/
+package-lock.json
+package.json
 
 # Build files
 frontend/build/
@@ -7,4 +10,3 @@ frontend/build/
 # Rust / Cargo
 backend/target/
 backend/Cargo.lock
-
