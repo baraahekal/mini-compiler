@@ -11,10 +11,10 @@ struct Code {
 
 #[derive(Serialize, Clone)]
 struct Tokens {
-    identifiers: HashSet<String>,
-    symbols: HashSet<String>,
-    reserved_words: HashSet<String>,
-    variables: HashSet<String>,
+    identifiers: Vec<String>,
+    symbols: Vec<String>,
+    reserved_words: Vec<String>,
+    variables: Vec<String>,
     lists: HashMap<String, String>,
     comments: Vec<String>,
     literals: HashMap<String, String>,
@@ -30,10 +30,10 @@ impl Scanner {
         Self {
             code,
             tokens: Tokens {
-                identifiers: HashSet::new(),
-                symbols: HashSet::new(),
-                reserved_words: HashSet::new(),
-                variables: HashSet::new(),
+                identifiers: Vec::new(),
+                symbols: Vec::new(),
+                reserved_words: Vec::new(),
+                variables: Vec::new(),
                 lists: HashMap::new(),
                 comments: Vec::new(),
                 literals: HashMap::new(),
@@ -100,33 +100,34 @@ impl Scanner {
     }
 
     fn process_symbols(&mut self) {
-        let symbols: HashSet<char> = ['(', ')', '+', '-', '*', '/', '%', '=', ';', '{', '}', ',', '|', '&', '>', '<', '!'].iter().cloned().collect();
+        let symbols: Vec<char> = ['(', ')', '+', '-', '*', '/', '%', '=', ';', '{', '}', ',', '|', '&', '>', '<', '!'].to_vec();
 
         let chars: Vec<char> = self.code.chars().collect();
         for i in 0..chars.len() {
             if (chars[i] == '&') && i + 1 < chars.len() && chars[i] == chars[i + 1] || (chars[i] == '|') && i + 1 < chars.len() && chars[i] == chars[i + 1] {
-                self.tokens.symbols.insert(format!("{}{}", chars[i], chars[i]));
+                self.tokens.symbols.push(format!("{}{}", chars[i], chars[i]));
             }
             else if symbols.contains(&chars[i]) && i > 0 && chars[i - 1] != chars[i] {
-                self.tokens.symbols.insert(chars[i].to_string());
+                self.tokens.symbols.push(chars[i].to_string());
             }
         }
     }
 
     fn process_identifiers_and_reserved_words(&mut self) {
-        let identifiers: HashSet<&str> = ["void", "int", "float", "string", "double", "bool", "char"].iter().cloned().collect();
-        let reserved_words: HashSet<&str> = ["for", "while", "return", "end", "if", "do", "break", "continue"].iter().cloned().collect();
+        let identifiers: Vec<&str> = ["void", "int", "float", "string", "double", "bool", "char"].to_vec();
+        let reserved_words: Vec<&str> = ["for", "while", "return", "end", "if", "do", "break", "continue"].to_vec();
 
         for word in self.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '"' || c == '\'') {
-            if identifiers.contains(word) {
-                self.tokens.identifiers.insert(word.to_string());
-            } else if reserved_words.contains(word) {
-                self.tokens.reserved_words.insert(word.to_string());
+            if identifiers.contains(&word) {
+                self.tokens.identifiers.push(word.to_string());
+            } else if reserved_words.contains(&word) {
+                self.tokens.reserved_words.push(word.to_string());
             }
         }
     }
 
     fn process_variables(&mut self) {
+        #[cfg(test)]
         self.process_identifiers_and_reserved_words();
         use regex::Regex;
         for word in self.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '\'') {
@@ -134,7 +135,7 @@ impl Scanner {
 
             // Check if the word is not an identifier or reserved word before classifying it as a variable // word.chars().next().unwrap_or_default().is_alphabetic()
             if !self.tokens.identifiers.contains(&variable_part) && !self.tokens.reserved_words.contains(&variable_part) && (Regex::new(r"^[a-zA-Z]").unwrap().is_match(&variable_part) || variable_part.starts_with('_')) {
-                self.tokens.variables.insert(variable_part);
+                self.tokens.variables.push(variable_part);
             }
         }
     }

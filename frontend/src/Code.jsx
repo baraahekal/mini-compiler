@@ -18,7 +18,7 @@ const CodeEditor = ({ code, setCode }) => {
       endLineNumber: 4,
       endColumn: 4,
       severity: monacoRef.current.MarkerSeverity.Error,
-      message: "expected ; at this line"
+      message: "expesdd line"
     }]);
   };
 
