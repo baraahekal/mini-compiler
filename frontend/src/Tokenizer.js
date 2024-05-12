@@ -74,87 +74,11 @@ function Tokenizer() {
           <div className="tokenized-data">
             <h2>Tokenized Data</h2>
             <ul className="toknized-list">
-              {tokens.symbols.length > 0 && (
-                <li>
-                  <h3>Symbols</h3>
-                  <ul className="toknized-single">
-                    {Array.from(tokens.symbols).map((symbol, index) => (
-                      <li key={index}>{symbol}</li>
-                    ))}
-                  </ul>
+              {tokens.tokens.map((token, index) => (
+                <li key={index}>
+                  {token.token_type}: {token.value}
                 </li>
-              )}
-              {tokens.identifiers.length > 0 && (
-                <li>
-                  <h3>Identifiers</h3>
-                  <ul className="toknized-single">
-                    {Array.from(tokens.identifiers).map((identifier, index) => (
-                      <li key={index}>{identifier}</li>
-                    ))}
-                  </ul>
-                </li>
-              )}
-              {tokens.reserved_words.length > 0 && (
-                <li>
-                  <h3>Reserved Keywords</h3>
-                  <ul className="toknized-single">
-                    {Array.from(tokens.reserved_words).map(
-                      (reserved_word, index) => (
-                        <li key={index}>{reserved_word}</li>
-                      )
-                    )}
-                  </ul>
-                </li>
-              )}
-              {tokens.variables.length > 0 && (
-                <li>
-                  <h3>Variables</h3>
-                  <ul className="toknized-single">
-                    {Array.from(tokens.variables).map((variable, index) => (
-                      <li key={index}>{variable}</li>
-                    ))}
-                  </ul>
-                </li>
-              )}
-              {Object.entries(tokens.literals).length > 0 && (
-                <li>
-                  <h3>Literals</h3>
-                  <ul className="toknized-single">
-                   
-                    {Object.entries(tokens.literals).map(
-                      ([listName, listItems], index) => (
-                        <li key={index}>
-                          <strong>{listName}:</strong> {listItems}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                </li>
-              )}
-              {Object.entries(tokens.lists).length > 0 && (
-                <li>
-                  <h3>Lists</h3>
-                  <ul className="toknized-single">
-                    {Object.entries(tokens.lists).map(
-                      ([listName, listItems], index) => (
-                        <li key={index}>
-                          <strong>{listName}:</strong> {listItems}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                </li>
-              )}
-              {tokens.comments.length > 0 && (
-                <li>
-                  <h3>Comments</h3>
-                  <ul className="toknized-single">
-                    {tokens.comments.map((comment, index) => (
-                      <li key={index}>{comment}</li>
-                    ))}
-                  </ul>
-                </li>
-              )}
+              ))}
             </ul>
           </div>
         )}

@@ -203,18 +203,22 @@ h1 {
   margin-left: 15px;
 }
 .toknized-list {
-  display: flex;
+  /* display: flex; */
   gap: 50px;
   flex-direction: row;
   list-style-type: none;
+  background-color: #733635;
+  color: #ebecdc;
+  border-radius: 10px;
+  padding: 8px 28px;
 }
-.toknized-single {
+/* .toknized-single {
   background-color: #733635;
   color: #ebecdc;
   border-radius: 10px;
   padding: 8px 28px;
   list-style-type: none;
-}
+} */
 .header {
   display: flex;
   align-items: center;
