@@ -34,7 +34,6 @@ pub enum TokenType {
     Multiply,
     Divide,
     Modulo,
-    PlusPlus,
     MinusMinus,
     Equal,
     NotEqual,
