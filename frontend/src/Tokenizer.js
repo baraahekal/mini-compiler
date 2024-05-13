@@ -71,17 +71,17 @@ function Tokenizer() {
         </div>
 
         {showTokenizedData && tokens && (
-          <div className="tokenized-data">
-            <h2>Tokenized Data</h2>
-            <ul className="toknized-list">
-              {tokens.tokens.map((token, index) => (
-                <li key={index}>
-                  {token.token_type}: {token.value}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <div className="tokenized-data">
+          <h2>Tokenized Data</h2>
+          <ul className="toknized-list">
+            {tokens.tokens.map((token, index) => (
+              <li key={index}>
+                {token.token_type}: {token.lexeme}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       </div>
     </div>
   );
