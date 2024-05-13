@@ -1,29 +1,73 @@
-import React, { useRef } from 'react'; 
+import React, { useEffect, useRef, useState } from 'react'; 
 import Editor from '@monaco-editor/react';
 
-
-const CodeEditor = ({ code, setCode }) => {
+const CodeEditor = () => {
+  const [code, setCode] = useState("");
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
+  const [typingTimeout, setTypingTimeout] = useState(null);
 
   const options = {
     fontSize: 14,
-    // fontFamily: 'Courier New',
   };
 
-  const compileCode = async () => {
-    monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', [{
-      startLineNumber: 4,
-      startColumn: 4,
-      endLineNumber: 4,
-      endColumn: 4,
-      severity: monacoRef.current.MarkerSeverity.Error,
-      message: "expesdd line"
-    }]);
+  const tokenizeCode = async () => {
+    try {
+      const response = await fetch("http://localhost:3030/tokenize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) { 
+        let errors = [];
+        if (typeof data === 'string') { 
+          errors = [{ message: data, line: 1, column: 1 }];
+        } else if (Array.isArray(data)) { 
+          errors = data;
+        }
+
+        const markers = errors.map(error => {
+          let errorMessage = error.message;
+          try {
+            const parsedMessage = JSON.parse(errorMessage);
+            if (Array.isArray(parsedMessage) && parsedMessage.length > 0) {
+              errorMessage = parsedMessage[0].message;
+            }
+          } catch (e) {
+            
+          }
+          
+          return {
+            startLineNumber: error.line + 1,
+            startColumn: error.column + 1,
+            endLineNumber: error.line + 1,
+            endColumn: error.column + 1,
+            severity: monacoRef.current.MarkerSeverity.Error,
+            message: errorMessage
+          };
+        });
+        monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', markers);
+      }
+    } catch (error) {
+      console.error('Failed to fetch:', error);
+    }
+  };
+
+  const handleChange = (newValue) => {
+    setCode(newValue);
+
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+    }
+
+    setTypingTimeout(setTimeout(tokenizeCode, 3000));
   };
 
   const editorDidMount = (editor, monaco) => {
-    console.log('editorDidMount', editor);
     editor.focus();
 
     monaco.editor.defineTheme('gruvbox-dark', {
@@ -39,37 +83,22 @@ const CodeEditor = ({ code, setCode }) => {
         'editor.foreground': '#ebdbb2',
         'editor.background': '#282828',
         'editorCursor.foreground': '#ebdbb2',
-        // 'editor.lineHighlightBackground': '#3c3836',
       },
     });
     monaco.editor.setTheme('gruvbox-dark');
 
     editorRef.current = editor;
     monacoRef.current = monaco;
-    compileCode();
-  };
-
-  const onChange = (newValue, e) => {
-    console.log('onChange', newValue, e);
-    setCode(newValue);
-    compileCode();
   };
 
   return (
-    <>
-      {/* <div style={{ borderRadius: '10px', overflow: 'hidden' }}> */}
-      <Editor
-        onMount={editorDidMount}
-        height={window.innerHeight / 2}
-        width={window.innerWidth / 2}
-        defaultLanguage="cpp"
-        defaultValue={code}
-        options={options}
-        onChange={onChange}
-      />
-    {/* </div> */}
-    </>
-    
+    <Editor
+      height="90vh"
+      defaultLanguage="cpp"
+      options={options}
+      onChange={handleChange}
+      onMount={editorDidMount}
+    />
   );
 };
 

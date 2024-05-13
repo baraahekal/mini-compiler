@@ -1,10 +1,10 @@
 import React from 'react';
-import Tokenizer from './Tokenizer';
+import CodeEditor from './Code';
 
 function App() {
   return (
     <div className="App">
-      <Tokenizer />
+      <CodeEditor />
     </div>
   );
 }
