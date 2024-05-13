@@ -1,30 +1,25 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenType {
-    // Keywords
-    Auto,
+    // Reserved Words
     Break,
     Case,
-    Char,
-    Continue,
     Do,
-    Double,
     Else,
-    Enum,
-    Extern,
-    Float,
-    String,
     For,
     If,
-    Int,
     Return,
-    Void,
     While,
-    Bool,
 
     // Identifiers
-    Identifier,
+    Int,
+    Float,
+    Bool,
+    String,
+    Double,
+    Char,
+
 
     // Constants
     IntegerLiteral,
@@ -80,7 +75,7 @@ pub enum TokenType {
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenGlobal {
     Identifier,
     Literal,

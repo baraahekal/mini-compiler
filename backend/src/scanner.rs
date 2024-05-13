@@ -1,7 +1,7 @@
 use warp::{Filter, Rejection, Reply};
 use serde::{Serialize, Deserialize};
 use crate::token::{Token, TokenType, TokenGlobal};
-// use crate::parser::Parser;
+use crate::parser::Parser;
 use regex::Regex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,7 +185,6 @@ impl Scanner {
         for word in self.code.split(|c: char| c.is_whitespace() || c == ';' || c == '=' || c == '(' || c == ')' || c == '{' || c == '}' || c == ',' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '|' || c == '&' || c == '>' || c == '<' || c == '!' || c == '"' || c == '\'') {
             if identifiers.contains(&word) {
                 let token_type = match word {
-                    "void" => TokenType::Void,
                     "int" => TokenType::Int,
                     "float" => TokenType::Float,
                     "string" => TokenType::String,
@@ -218,7 +217,6 @@ impl Scanner {
                     "if" => TokenType::If,
                     "do" => TokenType::Do,
                     "break" => TokenType::Break,
-                    "continue" => TokenType::Continue,
                     _ => unreachable!(),
                 };
 
@@ -296,5 +294,16 @@ impl Scanner {
 pub async fn scanning_input_code(code: Code) -> Result<impl Reply, Rejection> {
     let mut scanner = Scanner::new(code.code);
     let tokens = scanner.scan();
-    Ok(warp::reply::json(&tokens))
+    let mut parser = Parser::new(tokens.tokens);
+
+    match parser.parse_program() {
+        Ok(_) => {
+            println!("Entered Ok match arm");
+            Ok(warp::reply::json(&"No errors found."))
+        },
+        Err(errors) => {
+            println!("{:?}", errors);
+            Ok(warp::reply::json(&errors))
+        },
+    }
 }
