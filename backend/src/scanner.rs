@@ -324,6 +324,7 @@ impl Scanner {
 
     pub fn scan(&mut self) -> Tokens {
         self.code = self.process_comments();
+        self.line = 1;
         let lines: Vec<String> = self.code.split('\n').map(|s| s.to_string()).collect();
         for line in &lines {
             // Add whitespace around equal sign, semicolon, parentheses, and braces

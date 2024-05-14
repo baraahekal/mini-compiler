@@ -74,6 +74,7 @@ pub enum TokenType {
     Variable,
     List,
     Error,
+    PlusPlus,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

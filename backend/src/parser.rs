@@ -27,7 +27,7 @@ pub enum ExprNode {
 #[derive(Debug)]
 pub enum StmtNode {
     Assignment(String, ExprNode),
-    ForLoop(Box<StmtNode>, Box<ExprNode>, Box<StmtNode>),
+    ForLoop(Box<StmtNode>, Box<ExprNode>, Box<StmtNode>, Box<StmtNode>),
     IfStatement(ExprNode, Box<StmtNode>, Option<Box<StmtNode>>),
     Block(Vec<StmtNode>),
 }
@@ -114,7 +114,7 @@ impl Parser {
             },
             TokenGlobal::ReservedWord => {
                 match token.token_type {
-                    // TokenType::Print => self.parse_print(),
+                    TokenType::For => self.parse_for_statement(),
                     TokenType::If => self.parse_if_statement(),
                     // TokenType::While => self.parse_while_loop(),
                     TokenType::OpenBrace => self.parse_block(),
@@ -160,12 +160,11 @@ impl Parser {
 
         let assignment = self.parse_assignment()?;
 
-        if self.match_token(TokenType::Semicolon).is_none() {
-            return Err(self.error("Expected a semicolon", "Error"));
-        }
 
+        self.current -= 1;
         Ok(assignment)
     }
+
 
     fn parse_assignment(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_name = self.tokens[self.current].lexeme.clone();
@@ -176,29 +175,42 @@ impl Parser {
         }
         self.current += 1; // Consume the variable
 
-        if self.match_token(TokenType::Assignment).is_none() {
-            return Err(self.error("Expected an assignment operator", "Error"));
+        let operator = self.tokens[self.current].token_type.clone();
+        self.current += 1; // Consume the operator
+
+        let right = match operator {
+            TokenType::Plus => {
+                if self.tokens[self.current].token_type == TokenType::Plus {
+                    self.current += 1; // Consume the second '+'
+                    ExprNode::IntLiteral(1) // Handle i++
+                } else if self.tokens[self.current].token_type == TokenType::Assignment {
+                    self.current += 1; // Consume the '='
+                    self.parse_expression()? // Handle i += 1
+                } else {
+                    return Err(self.error("Expected '+' or '=' after '+'", "Error"));
+                }
+            },
+            TokenType::Assignment => {
+                if self.tokens[self.current].token_type == TokenType::Variable
+                    && self.tokens[self.current].lexeme == variable_name
+                    && self.tokens[self.current + 1].token_type == TokenType::Plus {
+                    self.current += 3; // Consume the variable, '+', and the number
+                    ExprNode::IntLiteral(self.tokens[self.current - 1].lexeme.parse::<i32>().unwrap()) // Handle i = i + 1
+                } else {
+                    self.parse_expression()? // Handle i = expression
+                }
+            },
+            _ => return Err(self.error("Expected an assignment operator", "Error")),
+        };
+
+        let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
+
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected a semicolon", "Error"));
         }
-
-        let expr = self.parse_expression()?;
-        let expr_type = self.get_expr_type(&expr)?;
-
-        if expr_type != variable_type {
-            match (expr_type, variable_type.clone()) {
-                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Integer Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String Literal to a variable of type '{:?}'", variable_type), "Error")),
-                _ => (),
-            }
-        }
-
-        println!("current cccc cccc parse_assignment: {:?}", self.current);
 
         Ok(StmtNode::Assignment(variable_name, expr))
     }
-
     fn parse_expression(&mut self) -> Result<ExprNode, ErrorMessage> {
         let mut expr = self.parse_term()?;
 
@@ -217,8 +229,6 @@ impl Parser {
             let right = self.parse_factor()?;
             expr = ExprNode::Binary(Box::new(expr), operator, Box::new(right));
         }
-
-        // println!("current parse_term: {:?}", self.current);
 
         Ok(expr)
     }
@@ -357,7 +367,6 @@ impl Parser {
             return Err(self.error("Expected '('", "Error"));
         }
 
-        println!("current iXxXxXxXxf: {:?}", self.tokens[self.current]);
         let condition = match self.parse_condition() {
 
             Ok(condition) => condition,
@@ -388,25 +397,124 @@ impl Parser {
         Ok(StmtNode::IfStatement(condition, Box::new(then_branch), else_branch.map(Box::new)))
     }
 
-    fn parse_for_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
-        if self.match_token(TokenType::OpenParen).is_some() {
-            self.current += 1; // Consume the OpenParen token
-            println!("current for: {:?}", self.tokens[self.current]);
-            let initialization = self.parse_statement()?;
+    fn parse_declaration_without_semicolon(&mut self) -> Result<StmtNode, ErrorMessage> {
+        let variable_type = self.tokens[self.current].token_type.clone();
+        self.current += 1; // Consume the type identifier
 
-            self.current += 1; // Consume the semicolon
-            println!("current for: {:?}", self.tokens[self.current]);
-            let condition = self.parse_condition()?;
-            println!("Good condition: {:?}", condition);
-
-            self.current += 1; // Consume the semicolon
-            println!("current for: {:?}", self.tokens[self.current]);
-            let increment = self.parse_statement()?;
-
-            Ok(StmtNode::ForLoop(Box::new(initialization), Box::new(condition), Box::new(increment)))
-        } else {
-            Err(self.error("Expected an opening parenthesis", "Error"))
+        let variable_token = self.tokens[self.current].clone();
+        if variable_token.token_global != TokenGlobal::Variable {
+            return Err(self.error("Expected a variable", "Error"));
         }
+        let variable_name = variable_token.lexeme;
+        self.declared_variables.insert(variable_name.clone(), variable_type.clone());
+
+        let assignment = self.parse_assignment_without_semicolon()?;
+
+        Ok(assignment)
+    }
+
+    fn parse_assignment_without_semicolon(&mut self) -> Result<StmtNode, ErrorMessage> {
+        let variable_name = self.tokens[self.current].lexeme.clone();
+        let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or(TokenType::Error);
+
+        if !self.is_variable_declared(&variable_name) {
+            return Err(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
+        }
+        self.current += 1; // Consume the variable
+
+        let operator = self.tokens[self.current].token_type.clone();
+        self.current += 1; // Consume the operator
+
+        let right = match operator {
+            TokenType::Plus => {
+                if self.tokens[self.current].token_type == TokenType::Plus {
+                    self.current += 1; // Consume the second '+'
+                    ExprNode::IntLiteral(1) // Handle i++
+                } else if self.tokens[self.current].token_type == TokenType::Assignment {
+                    self.current += 1; // Consume the '='
+                    self.parse_expression()? // Handle i += 1
+                } else {
+                    return Err(self.error("Expected '+' or '=' after '+'", "Error"));
+                }
+            },
+            TokenType::Assignment => {
+                if self.tokens[self.current].token_type == TokenType::Variable
+                    && self.tokens[self.current].lexeme == variable_name
+                    && self.tokens[self.current + 1].token_type == TokenType::Plus {
+                    self.current += 3; // Consume the variable, '+', and the number
+                    ExprNode::IntLiteral(self.tokens[self.current - 1].lexeme.parse::<i32>().unwrap()) // Handle i = i + 1
+                } else {
+                    self.parse_expression()? // Handle i = expression
+                }
+            },
+            _ => return Err(self.error("Expected an assignment operator", "Error")),
+        };
+
+        let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
+
+        Ok(StmtNode::Assignment(variable_name, expr))
+    }
+
+    fn parse_single_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
+        let stmt = self.parse_statement()?;
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected a semicolon", "Error"));
+        }
+        Ok(stmt)
+    }
+
+    fn parse_for_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
+        if self.match_token(TokenType::For).is_none() {
+            return Err(self.error("Expected 'for'", "Error"));
+        }
+
+        if self.match_token(TokenType::OpenParen).is_none() {
+            return Err(self.error("Expected '('", "Error"));
+        }
+
+        let initialization = if self.tokens[self.current].token_type != TokenType::Semicolon {
+            if self.tokens[self.current].token_global == TokenGlobal::Identifier {
+                Some(self.parse_declaration_without_semicolon()?)
+            } else {
+                Some(self.parse_assignment_without_semicolon()?)
+            }
+        } else {
+            None
+        };
+
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected ';'", "Error"));
+        }
+
+        let condition = if self.tokens[self.current].token_type != TokenType::Semicolon {
+            Some(self.parse_condition()?)
+        } else {
+            None
+        };
+
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected ';'", "Error"));
+        }
+
+        let increment = if self.tokens[self.current].token_type != TokenType::CloseParen {
+            Some(self.parse_assignment_without_semicolon()?)
+        } else {
+            None
+        };
+
+        if self.match_token(TokenType::CloseParen).is_none() {
+            return Err(self.error("Expected ')'", "Error"));
+        }
+        println!("current parse_for_statement: {:?}", self.current);
+
+        let statement = self.parse_block()?;
+
+        Ok(StmtNode::ForLoop(
+            initialization.map(Box::new).unwrap_or(Box::new(StmtNode::Block(vec![]))),
+            condition.map(Box::new).unwrap_or(Box::new(ExprNode::BoolLiteral(true))),
+            increment.map(Box::new).unwrap_or(Box::new(StmtNode::Block(vec![]))),
+            Box::new(statement)
+        ))
     }
 
     fn is_at_end(&self) -> bool {
@@ -452,8 +560,8 @@ impl Parser {
     }
 
     fn error(&self, message: &str, message_type_: &str) -> ErrorMessage {
-        println!("current error: {:?}", message);
-        let token = &self.tokens[if self.current >= 1 { self.current - 1 } else { self.current }];
+        let token = &self.tokens[if self.current >= self.tokens.len() { self.current - 1 } else { self.current }];
+        println!("current ezaaaaaaaay: {:?}", token);
         let error_message = ErrorMessage {
             message_type: message_type_.to_string(),
             message: format!("{}", message),
