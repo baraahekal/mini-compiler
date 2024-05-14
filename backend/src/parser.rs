@@ -368,7 +368,6 @@ impl Parser {
         }
 
         let condition = match self.parse_condition() {
-
             Ok(condition) => condition,
             Err(err) if err.message_type == "Warning" => {
                 println!("Warning: {:?}", err.message);
@@ -378,18 +377,22 @@ impl Parser {
             Err(err) => return Err(err),
         };
 
-
         if self.match_token(TokenType::CloseParen).is_none() {
             return Err(self.error("Expected ')'", "Error"));
         }
 
-        println!("Success");
-
         let then_branch = self.parse_block()?;
-        println!("then_branch: {:?}", then_branch);
-
+        println!("current parse_if_statement: {:?}", self.current);
+        self.current += 1;
         let else_branch = if self.match_token(TokenType::Else).is_some() {
-            Some(self.parse_block()?)
+            if self.match_token(TokenType::If).is_some() {
+                // Handle 'else if'
+                self.current -= 1; // Go back to the 'if' token
+                Some(self.parse_if_statement()?)
+            } else {
+                // Handle 'else'
+                Some(self.parse_block()?)
+            }
         } else {
             None
         };
