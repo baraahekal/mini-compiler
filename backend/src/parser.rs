@@ -149,43 +149,45 @@ impl Parser {
     fn parse_declaration(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_type = self.tokens[self.current].token_type.clone();
         println!("variable_type: {:?}", variable_type);
+
         self.current += 1; // Consume the type identifier
-        println!("current parse_declaration: {:?}", self.current);
 
         let variable_token = self.tokens[self.current].clone();
         if variable_token.token_global != TokenGlobal::Variable {
-            self.errors.push(self.error("Expected a variable", "Error"));
+            return Err(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
-        self.declared_variables.insert(variable_name.clone(), variable_type.clone());
+        println!("variable_name: {:?}", variable_name);
 
         self.current += 1; // Consume the variable
+        println!("current token: {:?}", self.tokens[self.current]);
+        if self.match_token(TokenType::Assignment).is_none() {
+            return Err(self.error("Expected an =", "Error"));
+        }
 
-        let expr = if self.match_token(TokenType::Assignment).is_some() {
-            let expr = self.parse_expression()?;
-            let expr_type = self.get_expr_type(&expr)?;
+        let expr = self.parse_expression()?;
+        let expr_type = self.get_expr_type(&expr)?;
 
-            if expr_type != variable_type {
-                match (expr_type, variable_type.clone()) {
-                    (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Integer Literal", variable_type), "Error")),
-                    (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Float Literal", variable_type), "Error")),
-                    (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Boolean Literal", variable_type), "Error")),
-                    (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Char Literal", variable_type), "Error")),
-                    (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a String Literal", variable_type), "Error")),
-                    _ => expr,
-                }
-            } else {
-                expr
+        if expr_type != variable_type {
+            match (expr_type, variable_type.clone()) {
+                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Integer Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String Literal to a variable of type '{:?}'", variable_type), "Error")),
+                _ => (),
             }
-        } else {
-            ExprNode::IntLiteral(0) // Use a default value
-        };
+        }
 
-        let assignment = self.parse_assignment()?;
-
-
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected a semicolon", "Error"));
+        }
         self.current -= 1;
-        Ok(assignment)
+        println!("after declaration: {:?}", self.current);
+
+
+        self.declared_variables.insert(variable_name.clone(), variable_type);
+        Ok(StmtNode::Assignment(variable_name, expr))
     }
 
 
@@ -225,6 +227,18 @@ impl Parser {
             },
             _ => return Err(self.error("Expected an assignment operator", "Error")),
         };
+
+        let right_type = self.get_expr_type(&right)?;
+        if right_type != variable_type {
+            match (right_type, variable_type.clone()) {
+                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Integer Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String Literal to a variable of type '{:?}'", variable_type), "Error")),
+                _ => (),
+            }
+        }
 
         let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
 
@@ -583,6 +597,10 @@ impl Parser {
 
     fn is_variable_declared(&self, variable_name: &str) -> bool {
         self.declared_variables.contains_key(variable_name)
+    }
+
+    fn get_variable_type(&self, variable_name: &str) -> Result<TokenType, ErrorMessage> {
+        self.declared_variables.get(variable_name).cloned().ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"))
     }
 
     fn get_expr_type(&self, expr: &ExprNode) -> Result<TokenType, ErrorMessage> {
