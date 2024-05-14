@@ -3,6 +3,7 @@ use std::env::var;
 use crate::token::{Token, TokenType, TokenGlobal};
 use serde::Serialize;
 use warp::Filter;
+use crate::token::TokenType::Return;
 
 
 #[derive(Debug)]
@@ -129,7 +130,7 @@ impl Parser {
         let mut statements = Vec::new();
 
         if self.match_token(TokenType::OpenBrace).is_none() {
-            return Err(self.error("Expected '{'", "Error"));
+            self.errors.push(self.error("Expected '{'", "Error"));
         }
 
         println!("current parse_block: {:?}", self.current);
@@ -153,10 +154,32 @@ impl Parser {
 
         let variable_token = self.tokens[self.current].clone();
         if variable_token.token_global != TokenGlobal::Variable {
-            return Err(self.error("Expected a variable", "Error"));
+            self.errors.push(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
         self.declared_variables.insert(variable_name.clone(), variable_type.clone());
+
+        self.current += 1; // Consume the variable
+
+        let expr = if self.match_token(TokenType::Assignment).is_some() {
+            let expr = self.parse_expression()?;
+            let expr_type = self.get_expr_type(&expr)?;
+
+            if expr_type != variable_type {
+                match (expr_type, variable_type.clone()) {
+                    (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Integer Literal", variable_type), "Error")),
+                    (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Float Literal", variable_type), "Error")),
+                    (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Boolean Literal", variable_type), "Error")),
+                    (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a Char Literal", variable_type), "Error")),
+                    (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot initialize a variable of type '{:?}' with a String Literal", variable_type), "Error")),
+                    _ => expr,
+                }
+            } else {
+                expr
+            }
+        } else {
+            ExprNode::IntLiteral(0) // Use a default value
+        };
 
         let assignment = self.parse_assignment()?;
 
@@ -171,7 +194,7 @@ impl Parser {
         let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or(TokenType::Error);
 
         if !self.is_variable_declared(&variable_name) {
-            return Err(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
+            self.errors.push(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
         }
         self.current += 1; // Consume the variable
 
@@ -206,7 +229,7 @@ impl Parser {
         let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
 
         if self.match_token(TokenType::Semicolon).is_none() {
-            return Err(self.error("Expected a semicolon", "Error"));
+            self.errors.push(self.error("Expected a semicolon", "Error"));
         }
 
         Ok(StmtNode::Assignment(variable_name, expr))
@@ -290,7 +313,7 @@ impl Parser {
             },
             TokenType::Variable => {
                 if !self.is_variable_declared(&token.lexeme) {
-                    return Err(self.error(&format!("Use of undeclared variable '{}'", token.lexeme), "Error"));                }
+                    self.errors.push(self.error(&format!("Use of undeclared variable '{}'", token.lexeme), "Error"));                }
                 self.current += 1; // Consume the variable token
                 Ok(ExprNode::Variable(token.lexeme.clone()))
             },
@@ -326,12 +349,12 @@ impl Parser {
                     if let (ExprNode::IntLiteral(l_val), ExprNode::IntLiteral(r_val)) = (&**left, &**right) {
                         match operator {
                             TokenType::GreaterThan if l_val > r_val => (),
-                            TokenType::LessThan if l_val < r_val => (),
+                            TokenType::LessThan if l_val < r_val => self.errors.push(self.error("Warning: This condition is always true", "Warning")),
                             TokenType::Equal if l_val == r_val => (),
                             TokenType::NotEqual if l_val != r_val => (),
                             TokenType::GreaterThanOrEqual if l_val >= r_val => (),
-                            TokenType::LessThanOrEqual if l_val <= r_val => (),
-                            _ => return Err(self.error("Warning: This condition is always false", "Warning")),
+                            TokenType::LessThanOrEqual if l_val <= r_val => self.errors.push(self.error("Warning: This condition is always true", "Warning")),
+                            _ => self.errors.push(self.error("Warning: This condition is always false", "Warning")),
                         }
                     }
                 }
@@ -342,13 +365,15 @@ impl Parser {
                 let expr = self.parse_expression()?;
                 match &expr {
                     ExprNode::BoolLiteral(value) => {
-                        if !value {
-                            return Err(self.error("Warning: This condition is always false", "Warning"));
+                        if *value {
+                            self.errors.push(self.error("Warning: This condition is always true", "Warning"));
                         }
                     },
                     ExprNode::IntLiteral(value) => {
-                        if *value == 0 {
-                            return Err(self.error("Warning: This condition is always false", "Warning"));
+                        if *value != 0 {
+                            self.errors.push(self.error("Warning: This condition is always true", "Warning"));
+                        } else {
+                            self.errors.push(self.error("Warning: This condition is always false", "Warning"));
                         }
                     },
                     _ => (),
@@ -360,11 +385,11 @@ impl Parser {
 
     fn parse_if_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
         if self.match_token(TokenType::If).is_none() {
-            return Err(self.error("Expected 'if'", "Error"));
+            self.errors.push(self.error("Expected 'if'", "Error"));
         }
 
         if self.match_token(TokenType::OpenParen).is_none() {
-            return Err(self.error("Expected '('", "Error"));
+            self.errors.push(self.error("Expected '('", "Error"));
         }
 
         let condition = match self.parse_condition() {
@@ -378,7 +403,7 @@ impl Parser {
         };
 
         if self.match_token(TokenType::CloseParen).is_none() {
-            return Err(self.error("Expected ')'", "Error"));
+            self.errors.push(self.error("Expected ')'", "Error"));
         }
 
         let then_branch = self.parse_block()?;
@@ -406,7 +431,7 @@ impl Parser {
 
         let variable_token = self.tokens[self.current].clone();
         if variable_token.token_global != TokenGlobal::Variable {
-            return Err(self.error("Expected a variable", "Error"));
+            self.errors.push(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
         self.declared_variables.insert(variable_name.clone(), variable_type.clone());
@@ -421,7 +446,7 @@ impl Parser {
         let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or(TokenType::Error);
 
         if !self.is_variable_declared(&variable_name) {
-            return Err(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
+            self.errors.push(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
         }
         self.current += 1; // Consume the variable
 
@@ -461,18 +486,18 @@ impl Parser {
     fn parse_single_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
         let stmt = self.parse_statement()?;
         if self.match_token(TokenType::Semicolon).is_none() {
-            return Err(self.error("Expected a semicolon", "Error"));
+            self.errors.push(self.error("Expected a semicolon", "Error"));
         }
         Ok(stmt)
     }
 
     fn parse_for_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
         if self.match_token(TokenType::For).is_none() {
-            return Err(self.error("Expected 'for'", "Error"));
+            self.errors.push(self.error("Expected 'for'", "Error"));
         }
 
         if self.match_token(TokenType::OpenParen).is_none() {
-            return Err(self.error("Expected '('", "Error"));
+            self.errors.push(self.error("Expected '('", "Error"));
         }
 
         let initialization = if self.tokens[self.current].token_type != TokenType::Semicolon {
@@ -486,17 +511,26 @@ impl Parser {
         };
 
         if self.match_token(TokenType::Semicolon).is_none() {
-            return Err(self.error("Expected ';'", "Error"));
+            self.errors.push(self.error("Expected ';'", "Error"));
         }
 
         let condition = if self.tokens[self.current].token_type != TokenType::Semicolon {
-            Some(self.parse_condition()?)
+            let condition = self.parse_condition()?;
+            match &condition {
+                ExprNode::BoolLiteral(value) => {
+                    if *value {
+                        self.errors.push(self.error("Warning: Endless loop", "Warning"));
+                    }
+                },
+                _ => (),
+            }
+            Some(condition)
         } else {
             None
         };
 
         if self.match_token(TokenType::Semicolon).is_none() {
-            return Err(self.error("Expected ';'", "Error"));
+            self.errors.push(self.error("Expected ';'", "Error"));
         }
 
         let increment = if self.tokens[self.current].token_type != TokenType::CloseParen {
@@ -506,7 +540,7 @@ impl Parser {
         };
 
         if self.match_token(TokenType::CloseParen).is_none() {
-            return Err(self.error("Expected ')'", "Error"));
+            self.errors.push(self.error("Expected ')'", "Error"));
         }
         println!("current parse_for_statement: {:?}", self.current);
 
