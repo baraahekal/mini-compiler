@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'; 
 import Editor from '@monaco-editor/react';
+import "./Tokenizer.css";
+import icon from "./icon.svg";
+
 
 const CodeEditor = () => {
   const [code, setCode] = useState("");
@@ -55,9 +58,9 @@ const CodeEditor = () => {
           }
           
           return {
-            startLineNumber: error.line + 1,
+            startLineNumber: error.line,
             startColumn: error.column + 1,
-            endLineNumber: error.line + 1,
+            endLineNumber: error.line,
             endColumn: error.column + 1,
             severity: severity,
             message: errorMessage
@@ -111,16 +114,30 @@ const CodeEditor = () => {
     editorRef.current = editor;
     monacoRef.current = monaco;
   };
-
   return (
-    <Editor
-      height="90vh"
-      defaultLanguage="cpp"
-      options={options}
-      value={code}
-      onChange={handleChange}
-      onMount={editorDidMount}
-    />
+    <div>
+      <div className="header">
+        <img src={icon} alt="Icon" width="40px" height="40px" />
+        <h1>Mini-Compiler</h1>
+      </div>
+      <div className="tokenizer-container">
+        <h2>Please Write Your Code here</h2>
+          <Editor
+            onMount={editorDidMount}
+            height={window.innerHeight / 2}
+            width={window.innerWidth / 2}
+            defaultLanguage="cpp"
+            options={options}
+            defaultValue={code}
+            onChange={handleChange}
+          />
+        <div class="buttonContainer">
+          <div class="dsButtonAnim" onClick={tokenizeCode}>
+            <span>Tokenize</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
