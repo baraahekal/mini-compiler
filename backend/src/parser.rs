@@ -24,17 +24,19 @@ pub enum ExprNode {
     CharIdentifier(String),
 }
 
+#[derive(Debug)]
 pub enum StmtNode {
     Assignment(String, ExprNode),
     ForLoop(Box<StmtNode>, Box<ExprNode>, Box<StmtNode>),
-    IfStatement(ExprNode, Vec<StmtNode>, Option<Vec<StmtNode>>),
+    IfStatement(ExprNode, Box<StmtNode>, Option<Box<StmtNode>>),
+    Block(Vec<StmtNode>),
 }
 
 pub struct ProgramNode {
     pub statements: Vec<StmtNode>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct ErrorMessage {
     message_type: String,
     message: String,
@@ -47,6 +49,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     declared_variables: HashMap<String, TokenType>,
     current: usize,
+    errors: Vec<ErrorMessage>,
 }
 
 impl Parser {
@@ -55,6 +58,7 @@ impl Parser {
             tokens,
             current: 0,
             declared_variables: HashMap::new(),
+            errors: Vec::new(),
         }
     }
 
@@ -62,16 +66,17 @@ impl Parser {
         // println!("current parse_prgrm: {:?}", self.current);
 
         let mut statements = Vec::new();
-        let mut errors = Vec::new();
 
         while !self.is_at_end() {
             match self.parse_statement() {
                 Ok(stmt) => {
                     statements.push(stmt);
+                    println!("current parse_program: {:?}", self.current);
                     self.current += 1;
+                    println!("current parse_program: {:?}", self.current);
                 },
                 Err(e) => {
-                    errors.push(e);
+                    self.errors.push(e);
 
                     if (self.current) < self.tokens.len() {
                         let cur_line = self.tokens[self.current].line;
@@ -82,12 +87,12 @@ impl Parser {
                 },
             }
         }
-        println!("errors total: {:?}", errors);
+        println!("errors total: {:?}", self.errors);
 
-        if errors.is_empty() {
+        if self.errors.is_empty() {
             Ok(ProgramNode { statements })
         } else {
-            Err(errors)
+            Err(self.errors.clone())
         }
     }
 
@@ -102,13 +107,17 @@ impl Parser {
                     _ => Err(self.error("Expected a type identifier", "Error")),
                 }
             },
-            TokenGlobal::Variable => self.parse_assignment(),
+            TokenGlobal::Variable => {
+                println!("entered variable ");
+                println!("current parse_statement: {:?}", self.current);
+                self.parse_assignment()
+            },
             TokenGlobal::ReservedWord => {
                 match token.token_type {
                     // TokenType::Print => self.parse_print(),
                     TokenType::If => self.parse_if_statement(),
                     // TokenType::While => self.parse_while_loop(),
-                    // TokenType::OpenBrace => self.parse_block(),
+                    TokenType::OpenBrace => self.parse_block(),
                     _ => Err(self.error("Unexpected reserved word in statement", "Error")),
                 }
             },
@@ -116,55 +125,76 @@ impl Parser {
         }
     }
 
+    fn parse_block(&mut self) -> Result<StmtNode, ErrorMessage> {
+        let mut statements = Vec::new();
+
+        if self.match_token(TokenType::OpenBrace).is_none() {
+            return Err(self.error("Expected '{'", "Error"));
+        }
+
+        println!("current parse_block: {:?}", self.current);
+
+        while let Ok(stmt) = self.parse_statement() {
+            statements.push(stmt);
+            if self.match_token(TokenType::CloseBrace).is_some() {
+                break;
+            }
+        }
+
+        Ok(StmtNode::Block(statements))
+    }
+
+
     fn parse_declaration(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_type = self.tokens[self.current].token_type.clone();
         println!("variable_type: {:?}", variable_type);
-
         self.current += 1; // Consume the type identifier
+        println!("current parse_declaration: {:?}", self.current);
 
         let variable_token = self.tokens[self.current].clone();
         if variable_token.token_global != TokenGlobal::Variable {
             return Err(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
-        println!("variable_name: {:?}", variable_name);
+        self.declared_variables.insert(variable_name.clone(), variable_type.clone());
 
-        self.current += 1; // Consume the variable
+        let assignment = self.parse_assignment()?;
 
-        let expr = if self.match_token(TokenType::Assignment).is_some() {
-            println!("Matched assignment");
-            self.parse_expression()?
-        } else {
-            ExprNode::IntLiteral(0) // Use a default value
-        };
-
-        println!("current parse_declaration: {:?}", self.current);
         if self.match_token(TokenType::Semicolon).is_none() {
             return Err(self.error("Expected a semicolon", "Error"));
         }
 
-
-
-        self.declared_variables.insert(variable_name.clone(), variable_type);
-        Ok(StmtNode::Assignment(variable_name, expr))
+        Ok(assignment)
     }
 
     fn parse_assignment(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_name = self.tokens[self.current].lexeme.clone();
+        let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or(TokenType::Error);
+
         if !self.is_variable_declared(&variable_name) {
             return Err(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
         }
         self.current += 1; // Consume the variable
 
-        if !self.match_token(TokenType::Assignment).is_none() {
+        if self.match_token(TokenType::Assignment).is_none() {
             return Err(self.error("Expected an assignment operator", "Error"));
         }
 
         let expr = self.parse_expression()?;
+        let expr_type = self.get_expr_type(&expr)?;
 
-        if !self.match_token(TokenType::Semicolon).is_none() {
-            return Err(self.error("Expected a semicolon", "Error"));
+        if expr_type != variable_type {
+            match (expr_type, variable_type.clone()) {
+                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Integer Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String Literal to a variable of type '{:?}'", variable_type), "Error")),
+                _ => (),
+            }
         }
+
+        println!("current cccc cccc parse_assignment: {:?}", self.current);
 
         Ok(StmtNode::Assignment(variable_name, expr))
     }
@@ -195,6 +225,8 @@ impl Parser {
 
     fn parse_factor(&mut self) -> Result<ExprNode, ErrorMessage> {
         let token = self.tokens[self.current].clone();
+
+        println!("toXXXXXXXXXken: {:?}", token);
         match &token.token_type {
             TokenType::OpenParen => {
                 self.current += 1; // Consume the OpenParen token
@@ -234,6 +266,7 @@ impl Parser {
             },
             TokenType::StringLiteral => {
                 self.current += 1; // Consume the literal token
+
                 Ok(ExprNode::StringLiteral(token.lexeme.clone()))
             },
             TokenType::BooleanLiteral => {
@@ -246,6 +279,8 @@ impl Parser {
                 }
             },
             TokenType::Variable => {
+                if !self.is_variable_declared(&token.lexeme) {
+                    return Err(self.error(&format!("Use of undeclared variable '{}'", token.lexeme), "Error"));                }
                 self.current += 1; // Consume the variable token
                 Ok(ExprNode::Variable(token.lexeme.clone()))
             },
@@ -322,42 +357,35 @@ impl Parser {
             return Err(self.error("Expected '('", "Error"));
         }
 
-        let condition = self.parse_condition()?;
+        println!("current iXxXxXxXxf: {:?}", self.tokens[self.current]);
+        let condition = match self.parse_condition() {
+
+            Ok(condition) => condition,
+            Err(err) if err.message_type == "Warning" => {
+                println!("Warning: {:?}", err.message);
+                self.errors.push(err);
+                ExprNode::BoolLiteral(false) // Use a default value
+            },
+            Err(err) => return Err(err),
+        };
+
 
         if self.match_token(TokenType::CloseParen).is_none() {
             return Err(self.error("Expected ')'", "Error"));
         }
 
-        if self.match_token(TokenType::OpenBrace).is_none() {
-            return Err(self.error("Expected '{'", "Error"));
-        }
+        println!("Success");
 
-        let mut then_branch = Vec::new();
-        while let Ok(stmt) = self.parse_statement() {
-            then_branch.push(stmt);
-            if self.match_token(TokenType::CloseBrace).is_some() {
-                break;
-            }
-        }
+        let then_branch = self.parse_block()?;
+        println!("then_branch: {:?}", then_branch);
 
         let else_branch = if self.match_token(TokenType::Else).is_some() {
-            if self.match_token(TokenType::OpenBrace).is_none() {
-                return Err(self.error("Expected '{'", "Error"));
-            }
-
-            let mut else_statements = Vec::new();
-            while let Ok(stmt) = self.parse_statement() {
-                else_statements.push(stmt);
-                if self.match_token(TokenType::CloseBrace).is_some() {
-                    break;
-                }
-            }
-            Some(else_statements)
+            Some(self.parse_block()?)
         } else {
             None
         };
 
-        Ok(StmtNode::IfStatement(condition, then_branch, else_branch))
+        Ok(StmtNode::IfStatement(condition, Box::new(then_branch), else_branch.map(Box::new)))
     }
 
     fn parse_for_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
@@ -412,6 +440,17 @@ impl Parser {
         self.declared_variables.contains_key(variable_name)
     }
 
+    fn get_expr_type(&self, expr: &ExprNode) -> Result<TokenType, ErrorMessage> {
+        match expr {
+            ExprNode::IntLiteral(_) => Ok(TokenType::Int),
+            ExprNode::FloatLiteral(_) => Ok(TokenType::Float),
+            ExprNode::CharLiteral(_) => Ok(TokenType::Char),
+            ExprNode::StringLiteral(_) => Ok(TokenType::String),
+            ExprNode::BoolLiteral(_) => Ok(TokenType::Bool),
+            _ => Err(self.error("Expression is not a literal", "Error")),
+        }
+    }
+
     fn error(&self, message: &str, message_type_: &str) -> ErrorMessage {
         println!("current error: {:?}", message);
         let token = &self.tokens[if self.current >= 1 { self.current - 1 } else { self.current }];
@@ -423,5 +462,4 @@ impl Parser {
         };
         error_message
     }
-
 }
