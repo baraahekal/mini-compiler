@@ -18,9 +18,11 @@ const CodeEditor = () => {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ code }),
       });
 
       const data = await response.json();
+      console.log(data);
 
       if (response.ok) { 
         let errors = [];
@@ -38,7 +40,18 @@ const CodeEditor = () => {
               errorMessage = parsedMessage[0].message;
             }
           } catch (e) {
-            
+            // errorMessage is not a JSON string, leave it as is
+          }
+
+          let severity;
+          switch (error.message_type) {
+            case 'Warning':
+              severity = monacoRef.current.MarkerSeverity.Warning;
+              break;
+            case 'Error':
+            default:
+              severity = monacoRef.current.MarkerSeverity.Error;
+              break;
           }
           
           return {
@@ -46,12 +59,16 @@ const CodeEditor = () => {
             startColumn: error.column + 1,
             endLineNumber: error.line + 1,
             endColumn: error.column + 1,
-            severity: monacoRef.current.MarkerSeverity.Error,
+            severity: severity,
             message: errorMessage
           };
         });
-        monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', markers);
-      }
+        if (errors[0].message === 'No errors found.') {
+          monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', []);
+        } else {
+          monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', markers);
+        }     
+       }
     } catch (error) {
       console.error('Failed to fetch:', error);
     }
@@ -60,11 +77,15 @@ const CodeEditor = () => {
   const handleChange = (newValue) => {
     setCode(newValue);
 
+    if (editorRef.current && monacoRef.current) {
+      monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', []);
+    }
+
     if (typingTimeout) {
       clearTimeout(typingTimeout);
     }
 
-    setTypingTimeout(setTimeout(tokenizeCode, 3000));
+    setTypingTimeout(setTimeout(tokenizeCode, 1000));
   };
 
   const editorDidMount = (editor, monaco) => {
@@ -96,6 +117,7 @@ const CodeEditor = () => {
       height="90vh"
       defaultLanguage="cpp"
       options={options}
+      value={code}
       onChange={handleChange}
       onMount={editorDidMount}
     />
