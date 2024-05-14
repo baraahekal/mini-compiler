@@ -11,6 +11,7 @@ pub enum TokenType {
     If,
     Return,
     While,
+    Continue,
 
     // Identifiers
     Int,
@@ -19,6 +20,7 @@ pub enum TokenType {
     String,
     Double,
     Char,
+    Void,
 
 
     // Constants

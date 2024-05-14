@@ -1,6 +1,6 @@
 use warp::{Filter, Rejection, Reply};
 use serde::{Serialize, Deserialize};
-// use parser::Parser;
+use parser::Parser;
 mod parser;
 mod scanner;
 mod token;
@@ -9,7 +9,7 @@ mod token;
 async fn main() {
     let api_route = warp::path("tokenize")
         .and(warp::post())
-        // .and(warp::body::json())
+        .and(warp::body::json())
         .and_then(scanner::scanning_input_code);
 
     let cors = warp::cors()
