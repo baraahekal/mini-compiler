@@ -178,7 +178,7 @@ impl Scanner {
     }
 
     fn process_symbols(&mut self, potential_token: &str ,original_line: usize, original_column: usize) -> bool {
-        let symbols: Vec<&str> = ["(", ")", "+", "-", "*", "/", "%", "=", ";", "{", "}", ",", "|", "&", ">", "<", "!", "[", "]"].to_vec();
+        let symbols: Vec<&str> = ["(", ")", "+", "-", "*", "/", "%", "=", ";", ":", "{", "}", ",", "|", "&", ">", "<", "!", "[", "]"].to_vec();
         let mut found = false;
         for symbol in &symbols {
             if potential_token.contains(symbol) {
@@ -192,6 +192,7 @@ impl Scanner {
                     "%" => TokenType::Modulo,
                     "=" => TokenType::Assignment,
                     ";" => TokenType::Semicolon,
+                    ":" => TokenType::Colon,
                     "{" => TokenType::OpenBrace,
                     "}" => TokenType::CloseBrace,
                     "," => TokenType::Comma,
@@ -254,7 +255,7 @@ impl Scanner {
     }
 
     fn process_reserved_words(&mut self, potential_token: &str, original_line: usize, original_column: usize) -> bool {
-        let reserved_words: Vec<&str> = ["for", "while", "return", "end", "if", "do", "break", "continue", "else"].to_vec();
+        let reserved_words: Vec<&str> = ["for", "while", "return", "end", "if", "do", "break", "switch", "case", "continue", "else"].to_vec();
         let potential_token = potential_token.trim(); // Trim the whitespace
 
         for reserved_word in &reserved_words {
@@ -268,6 +269,8 @@ impl Scanner {
                     "break" => TokenType::Break,
                     "continue" => TokenType::Continue,
                     "else" => TokenType::Else,
+                    "switch" => TokenType::Switch,
+                    "case" => TokenType::Case,
 
                     _ => unreachable!(),
                 };

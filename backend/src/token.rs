@@ -12,6 +12,7 @@ pub enum TokenType {
     Return,
     While,
     Continue,
+    Switch,
 
     // Identifiers
     Int,
@@ -97,10 +98,4 @@ pub struct Token {
     pub column: usize,
     pub original_line: usize,
     pub original_column: usize,
-}
-
-impl Token {
-    pub fn syntax_error(&self, message: &str) -> String {
-        format!("Syntax Error: {} at line {}, column {}", message, self.line, self.column)
-    }
 }

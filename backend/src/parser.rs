@@ -32,6 +32,7 @@ pub enum StmtNode {
     IfStatement(ExprNode, Box<StmtNode>, Option<Box<StmtNode>>),
     WhileLoop(Box<ExprNode>, Box<StmtNode>),
     DoWhileLoop(Box<ExprNode>, Box<StmtNode>),
+    SwitchCase(Box<ExprNode>, Vec<(ExprNode, StmtNode)>),
     Block(Vec<StmtNode>),
 }
 
@@ -120,19 +121,48 @@ impl Parser {
                     TokenType::For => self.parse_for_statement(),
                     TokenType::If => self.parse_if_statement(),
                     TokenType::Do => self.parse_do_while_loop(),
+                    TokenType::Switch => self.parse_switch_case(),
                     TokenType::While => self.parse_while_loop(),
-                    TokenType::OpenBrace => self.parse_block(),
-                    _ => Err(self.error("Unexpected reserved word in statement", "Error")),
+                    TokenType::OpenBrace => self.parse_block(0),
+                    TokenType::Case => {
+                        self.current += 1;
+                        Ok(StmtNode::Block(vec![]))
+                    }
+                    TokenType::Break => {
+                        self.current += 1;
+                        Ok(StmtNode::Block(vec![]))
+                    },
+                    _ => {
+                        println!("reserved word: {:?}", token.token_type);
+                        Err(self.error("Unexpected reserved word in statement", "Error"))
+                    },
+                }
+            },
+            TokenGlobal::Symbol => {
+                match token.token_type {
+                    TokenType::Semicolon => {
+                        self.current += 1;
+                        Ok(StmtNode::Block(vec![]))
+                    },
+                    TokenType::CloseBrace => {
+                        println!("current ZZZZZZZZZZ: {:?}", self.current);
+                        // self.current += 1;
+                        Ok(StmtNode::Block(vec![]))
+                    }
+                    _ => Err(self.error("Unexpected symbol in statement", "Error")),
                 }
             },
             _ => Err(self.error("Expected an identifier", "Error")),
         }
     }
 
-    fn parse_block(&mut self) -> Result<StmtNode, ErrorMessage> {
+    fn parse_block(&mut self, flag_do_while: i32) -> Result<StmtNode, ErrorMessage> {
         let mut statements = Vec::new();
 
+        // println!("ANAAAA DAKHAAAALT FOOOR LOOOOP {:?}", self.tokens[self.current].lexeme);
         if self.match_token(TokenType::OpenBrace).is_none() {
+            println!("PLEEEEEEEEESEEEEE NNNNNNNOOOOOOOO open");
+
             self.errors.push(self.error("Expected '{'", "Error"));
         }
 
@@ -142,14 +172,23 @@ impl Parser {
 
         while let Ok(stmt) = self.parse_statement() {
 
-        println!("current parse_block1: {:?}", self.current);
+            if (flag_do_while == 1 && self.tokens[self.current].lexeme == "while") {
+                break;
+            }
+
+            // println!("current Gaaaatttt: {:?}  {:?}", self.current, self.tokens[self.current]);
             statements.push(stmt);
             if self.match_token(TokenType::CloseBrace).is_some() {
+                self.current -= 1;
                 break;
             }
         }
-        println!("current parse_block2: {:?}", self.current);
 
+
+        if self.match_token(TokenType::CloseBrace).is_none() {
+            println!("PLEEEEEEEEESEEEEE NNNNNNNOOOOOOOO close");
+            return Err(self.error("Expected '}'", "Error"));
+        }
 
         Ok(StmtNode::Block(statements))
     }
@@ -178,11 +217,11 @@ impl Parser {
 
         if expr_type != variable_type {
             match (expr_type, variable_type.clone()) {
-                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Integer Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign an Integer to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String to a variable of type '{:?}'", variable_type), "Error")),
                 _ => (),
             }
         }
@@ -208,7 +247,9 @@ impl Parser {
         self.current += 1; // Consume the variable
 
         let operator = self.tokens[self.current].token_type.clone();
+        println!("{:?} enta meeeen:   ", operator);
         self.current += 1; // Consume the operator
+        println!("current parse_assignment: {:?}", self.tokens[self.current]);
 
         let right = match operator {
             TokenType::Plus => {
@@ -235,20 +276,22 @@ impl Parser {
             _ => return Err(self.error("Expected an assignment operator", "Error")),
         };
 
+
+
         let right_type = self.get_expr_type(&right)?;
-        if right_type != variable_type {
+        if right_type != variable_type && self.is_valid_variable_type(&variable_type){
             match (right_type, variable_type.clone()) {
-                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Integer Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char Literal to a variable of type '{:?}'", variable_type), "Error")),
-                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String Literal to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Int, _) => return Err(self.error(&format!("Syntax Error: Cannot assign an Integer to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Float, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Float to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Bool, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Boolean to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::Char, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a Char to a variable of type '{:?}'", variable_type), "Error")),
+                (TokenType::String, _) => return Err(self.error(&format!("Syntax Error: Cannot assign a String to a variable of type '{:?}'", variable_type), "Error")),
                 _ => (),
             }
         }
 
+        println!("current AFTER: {:?}", self.tokens[self.current]);
         let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
-
         if self.match_token(TokenType::Semicolon).is_none() {
             self.errors.push(self.error("Expected a semicolon", "Error"));
         }
@@ -296,6 +339,7 @@ impl Parser {
             TokenType::IntegerLiteral => {
                 match token.lexeme.parse::<i32>() {
                     Ok(value) => {
+                        println!("FUCKED UPPPPP %%%%%%%%!!!!!!!!!!");
                         self.current += 1; // Consume the literal token
                         Ok(ExprNode::IntLiteral(value))
                     },
@@ -428,9 +472,9 @@ impl Parser {
             self.errors.push(self.error("Expected ')'", "Error"));
         }
 
-        let then_branch = self.parse_block()?;
-        self.current += 1;
-        println!("current parse_if_statement: {:?}", self.current);
+        let then_branch = self.parse_block(0)?;
+        // self.current += 1;
+        // println!("current parse_if_statement: {:?}, {:?}", self.current, self.tokens[self.current]);
         let else_branch = if self.match_token(TokenType::Else).is_some() {
             if self.match_token(TokenType::If).is_some() {
                 // Handle 'else if'
@@ -438,7 +482,7 @@ impl Parser {
                 Some(self.parse_if_statement()?)
             } else {
                 // Handle 'else'
-                Some(self.parse_block()?)
+                Some(self.parse_block(0)?)
             }
         } else {
             self.current -= 1;
@@ -509,7 +553,12 @@ impl Parser {
 
     fn parse_single_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
         let stmt = self.parse_statement()?;
+        println!("stmt: {:?}", stmt);
+        self.current -= 1;
+
+        // println!("current parse_single_statement: {:?}", self.current);
         if self.match_token(TokenType::Semicolon).is_none() {
+            println!("Fiiiiirrrrreeeee: {:?}", self.tokens[self.current]);
             self.errors.push(self.error("Expected a semicolon", "Error"));
         }
         Ok(stmt)
@@ -566,9 +615,10 @@ impl Parser {
         if self.match_token(TokenType::CloseParen).is_none() {
             self.errors.push(self.error("Expected ')'", "Error"));
         }
-        println!("current parse_for_statement: {:?}", self.current);
 
-        let statement = self.parse_block()?;
+        let statement = self.parse_block(0)?;
+        println!("current after FOR LOOP: {:?}", self.current);
+
 
         Ok(StmtNode::ForLoop(
             initialization.map(Box::new).unwrap_or(Box::new(StmtNode::Block(vec![]))),
@@ -579,6 +629,7 @@ impl Parser {
     }
 
     fn parse_while_loop(&mut self) -> Result<StmtNode, ErrorMessage> {
+        println!("ANA GEEEEEEET");
         if self.match_token(TokenType::While).is_none() {
             return Err(self.error("Expected 'while'", "Error"));
         }
@@ -593,7 +644,7 @@ impl Parser {
             return Err(self.error("Expected ')'", "Error"));
         }
 
-        let body = self.parse_block()?;
+        let body = self.parse_block(0)?;
 
         Ok(StmtNode::WhileLoop(Box::new(condition), Box::new(body)))
     }
@@ -603,8 +654,8 @@ impl Parser {
             return Err(self.error("Expected 'do'", "Error"));
         }
 
-        let body = self.parse_block()?;
-        self.current += 1;
+        let body = self.parse_block(1)?;
+        // self.current += 1;
         println!("current parse_do_while_loop: {:?}", self.current);
 
         if self.match_token(TokenType::While).is_none() {
@@ -626,6 +677,80 @@ impl Parser {
         }
 
         Ok(StmtNode::DoWhileLoop(Box::new(condition), Box::new(body)))
+    }
+
+    fn parse_case_clause(&mut self) -> Result<(ExprNode, StmtNode), ErrorMessage> {
+        if self.match_token(TokenType::Case).is_none() {
+            return Err(self.error("Expected 'case'", "Error"));
+        }
+        let case_expr = self.parse_expression()?;
+        println!("Expr: {:?}", case_expr);
+        if self.match_token(TokenType::Colon).is_none() {
+            return Err(self.error("Expected ':'", "Error"));
+        }
+
+        let case_stmt = if self.tokens[self.current].token_type == TokenType::For ||  self.tokens[self.current].token_type == TokenType::While || self.tokens[self.current].token_type == TokenType::Do || self.tokens[self.current].token_type == TokenType::If {
+            // self.current += 1;
+            println!("IAM GOING TO WHULE");
+            self.parse_statement()?
+        } else if self.tokens[self.current].token_type != TokenType::Break {
+            self.parse_single_statement()?
+        } else {
+            StmtNode::Block(vec![]) // Add an else branch that returns an empty StmtNode
+        };
+        println!("current parse_case_clause: {:?} {:?}", self.current, self.tokens[self.current]);
+
+        // Check for 'break' statement
+        if self.match_token(TokenType::Break).is_none() {
+            return Err(self.error("Expected 'break'", "Error"));
+        }
+
+        // Check for semicolon after 'break'
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected ';'", "Error"));
+        }
+
+        Ok((case_expr, case_stmt))
+    }
+
+    fn parse_switch_case(&mut self) -> Result<StmtNode, ErrorMessage> {
+        if self.match_token(TokenType::Switch).is_none() {
+            return Err(self.error("Expected 'switch'", "Error"));
+        }
+
+
+        if self.match_token(TokenType::OpenParen).is_none() {
+            return Err(self.error("Expected '('", "Error"));
+        }
+
+        let condition = match self.tokens[self.current].token_type {
+            TokenType::Variable => self.parse_expression()?,
+            _ => return Err(self.error("Expected a variable", "Error")),
+        };
+
+        println!("I FOUND SWIITTTTCCCCHHHCHCHCHCHCHHC");
+        if self.match_token(TokenType::CloseParen).is_none() {
+            return Err(self.error("Expected ')'", "Error"));
+        }
+
+        if self.match_token(TokenType::OpenBrace).is_none() {
+            return Err(self.error("Expected '{'", "Error"));
+        }
+
+        let mut cases = Vec::new();
+        while self.tokens[self.current].token_type == TokenType::Case {
+            let case_clause = self.parse_case_clause()?;
+            cases.push(case_clause);
+        }
+
+        println!("cases len: {:?}", cases.len());
+        println!("current parse_switch_case: {:?}", self.current);
+
+        if self.match_token(TokenType::CloseBrace).is_none() {
+            return Err(self.error("Expected '}'", "Error"));
+        }
+
+        Ok(StmtNode::SwitchCase(Box::new(condition), cases))
     }
 
     fn is_at_end(&self) -> bool {
@@ -659,6 +784,13 @@ impl Parser {
         self.declared_variables.contains_key(variable_name)
     }
 
+    fn is_valid_variable_type(&self, token_type: &TokenType) -> bool {
+        match token_type {
+            TokenType::Int | TokenType::Float | TokenType::Bool | TokenType::String | TokenType::Double | TokenType::Char => true,
+            _ => false,
+        }
+    }
+
     fn get_variable_type(&self, variable_name: &str) -> Result<TokenType, ErrorMessage> {
         self.declared_variables.get(variable_name).cloned().ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"))
     }
@@ -669,14 +801,13 @@ impl Parser {
             ExprNode::FloatLiteral(_) => Ok(TokenType::Float),
             ExprNode::CharLiteral(_) => Ok(TokenType::Char),
             ExprNode::StringLiteral(_) => Ok(TokenType::String),
-            ExprNode::BoolLiteral(_) => Ok(TokenType::Bool),
-            _ => Err(self.error("Expression is not a literal", "Error")),
+            ExprNode::Variable(name) => self.get_variable_type(name),
+            _ => Err(self.error("Expression is not a literal or a variable", "Error")),
         }
     }
 
     fn error(&self, message: &str, message_type_: &str) -> ErrorMessage {
         let token = &self.tokens[if self.current >= self.tokens.len() { self.current - 1 } else { self.current }];
-        println!("current ezaaaaaaaay: {:?}", token);
         let error_message = ErrorMessage {
             message_type: message_type_.to_string(),
             message: format!("{}", message),
