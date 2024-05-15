@@ -131,11 +131,6 @@ const CodeEditor = () => {
             defaultValue={code}
             onChange={handleChange}
           />
-        <div class="buttonContainer">
-          <div class="dsButtonAnim" onClick={tokenizeCode}>
-            <span>Tokenize</span>
-          </div>
-        </div>
       </div>
     </div>
   );
