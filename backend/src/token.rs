@@ -95,6 +95,8 @@ pub struct Token {
     pub lexeme: String,
     pub line: usize,
     pub column: usize,
+    pub original_line: usize,
+    pub original_column: usize,
 }
 
 impl Token {

@@ -33,14 +33,18 @@ impl Scanner {
             column: 0,
         }
     }
-    fn split_into_tokens_custom(&self, split_chars: &[char]) -> Vec<String> {
+    fn split_into_tokens_with_positions(&self, split_chars: &[char]) -> Vec<(String, usize)> {
         let mut tokens = Vec::new();
         let mut token = String::new();
+        let mut in_string_literal = false;
         let mut in_brackets = false;
         let mut in_braces = false;
+        let mut column = 0;
 
         for c in self.code.chars() {
-            if c == '[' {
+            if c == '"' {
+                in_string_literal = !in_string_literal;
+            } else if c == '[' {
                 in_brackets = true;
             } else if c == ']' {
                 in_brackets = false;
@@ -50,18 +54,20 @@ impl Scanner {
                 in_braces = false;
             }
 
-            if (in_brackets || in_braces || !split_chars.contains(&c)) && !c.is_whitespace() {
+            if in_string_literal || in_brackets || in_braces || !split_chars.contains(&c) {
                 token.push(c);
             } else if !token.is_empty() {
-                tokens.push(token.clone());
+                tokens.push((token.clone(), column - token.len() ));
                 token.clear();
             }
+
+            column += 1;
         }
 
         if !token.is_empty() {
-            tokens.push(token);
+            let token_len = token.len();
+            tokens.push((token.clone(), column - token_len )); // +1 because column is 0-indexed
         }
-
         tokens
     }
 
@@ -76,51 +82,36 @@ impl Scanner {
                 if let Some(end) = line.find("*/") {
                     in_multi_line_comment = false;
                     multi_line_comment.push_str(&line[..end + 2]);
-                    // self.tokens.tokens.push(Token {
-                    //     token_type: TokenType::Comment,
-                    //     token_global: TokenGlobal::Comment,
-                    //     lexeme: multi_line_comment.clone(),
-                    //     line: self.line,
-                    //     column: self.column,
-                    // });
                     multi_line_comment.clear();
 
+                    cleaned_code.push_str(&" ".repeat(end + 2));
                     cleaned_code.push_str(&line[end + 2..]);
-                    cleaned_code.push(' ');
                 } else {
                     multi_line_comment.push_str(line);
                     multi_line_comment.push('\n');
+                    cleaned_code.push_str(&" ".repeat(line.len()));
                 }
             } else {
                 if let Some(start) = line.find("/*") {
                     in_multi_line_comment = true;
                     cleaned_code.push_str(&line[..start]);
-                    cleaned_code.push(' ');
+                    cleaned_code.push_str(&" ".repeat(line.len() - start));
                     multi_line_comment.push_str(&line[start..]);
                     multi_line_comment.push('\n');
                 } else if let Some(start) = line.find("//") {
-                    // self.tokens.tokens.push(Token {
-                    //     token_type: TokenType::Comment,
-                    //     token_global: TokenGlobal::Comment,
-                    //     lexeme: line[start..].to_string(),
-                    //     line: self.line,
-                    //     column: self.column,
-                    //});
                     cleaned_code.push_str(&line[..start]);
-                    cleaned_code.push(' ');
+                    cleaned_code.push_str(&" ".repeat(line.len() - start));
                 } else {
                     cleaned_code.push_str(line);
-                    cleaned_code.push('\n');
                 }
             }
-            self.line += 1;
-            self.column = 0;
+            cleaned_code.push('\n');
         }
 
         cleaned_code
     }
 
-    fn process_literals(&mut self, potential_token: &str) -> bool {
+    fn process_literals(&mut self, potential_token: &str,  original_line: usize, original_column: usize) -> bool {
         if potential_token.starts_with('"') && potential_token.ends_with('"') {
             self.tokens.tokens.push(Token {
                 token_type: TokenType::StringLiteral,
@@ -128,6 +119,9 @@ impl Scanner {
                 lexeme: potential_token.trim_matches('"').to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
+
             });
             self.column += potential_token.len();
             return true;
@@ -138,6 +132,8 @@ impl Scanner {
                 lexeme: potential_token.to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += potential_token.len();
             return true;
@@ -148,6 +144,8 @@ impl Scanner {
                 lexeme: potential_token.to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += potential_token.len();
             return true;
@@ -158,6 +156,8 @@ impl Scanner {
                 lexeme: potential_token.to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += potential_token.len();
             return true;
@@ -168,6 +168,8 @@ impl Scanner {
                 lexeme: potential_token.to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += potential_token.len();
             return true;
@@ -175,7 +177,7 @@ impl Scanner {
         return false;
     }
 
-    fn process_symbols(&mut self, potential_token: &str) -> bool {
+    fn process_symbols(&mut self, potential_token: &str ,original_line: usize, original_column: usize) -> bool {
         let symbols: Vec<&str> = ["(", ")", "+", "-", "*", "/", "%", "=", ";", "{", "}", ",", "|", "&", ">", "<", "!", "[", "]"].to_vec();
         let mut found = false;
         for symbol in &symbols {
@@ -210,6 +212,8 @@ impl Scanner {
                     lexeme: symbol.to_string(),
                     line: self.line,
                     column: self.column,
+                    original_line:original_line,
+                    original_column:original_column
                 });
                 self.column += symbol.len();
                 found = true;
@@ -219,7 +223,7 @@ impl Scanner {
     }
 
 
-    fn process_identifiers(&mut self, potential_token: &str) -> bool {
+    fn process_identifiers(&mut self, potential_token: &str, original_line: usize, original_column: usize) -> bool {
         let identifiers: Vec<&str> = ["void", "int", "float", "string", "double", "bool", "char"].to_vec();
 
         if identifiers.contains(&potential_token) {
@@ -240,6 +244,8 @@ impl Scanner {
                 lexeme: potential_token.to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += potential_token.len();
             return true;
@@ -247,7 +253,7 @@ impl Scanner {
         false
     }
 
-    fn process_reserved_words(&mut self, potential_token: &str) -> bool {
+    fn process_reserved_words(&mut self, potential_token: &str, original_line: usize, original_column: usize) -> bool {
         let reserved_words: Vec<&str> = ["for", "while", "return", "end", "if", "do", "break", "continue", "else"].to_vec();
         let potential_token = potential_token.trim(); // Trim the whitespace
 
@@ -272,6 +278,8 @@ impl Scanner {
                     lexeme: reserved_word.to_string(),
                     line: self.line,
                     column: self.column,
+                    original_line:original_line,
+                    original_column:original_column
                 });
                 self.column += reserved_word.len();
                 return true;
@@ -280,7 +288,7 @@ impl Scanner {
         false
     }
 
-    fn process_variables(&mut self, potential_token: &str) -> bool {
+    fn process_variables(&mut self, potential_token: &str, original_line: usize, original_column: usize) -> bool {
         // Check if the word is not an identifier or reserved word before classifying it as a variable
         if !self.tokens.tokens.iter().any(|token| token.lexeme == potential_token && (matches!(token.token_global, TokenGlobal::Identifier) || matches!(token.token_global, TokenGlobal::ReservedWord))) && (Regex::new(r"^[a-zA-Z]").unwrap().is_match(potential_token) || potential_token.starts_with('_')) {
             self.tokens.tokens.push(Token {
@@ -289,6 +297,8 @@ impl Scanner {
                 lexeme: potential_token.to_string(),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += potential_token.len();
             return true;
@@ -297,7 +307,7 @@ impl Scanner {
     }
 
 
-    fn process_lists(&mut self, line: &str) -> bool {
+    fn process_lists(&mut self, line: &str ,original_line: usize, original_column: usize) -> bool {
         if line.contains("[") && line.contains("]") && line.contains("{") && line.contains("}") {
             let parts: Vec<&str> = line.split("{").collect();
 
@@ -315,6 +325,8 @@ impl Scanner {
                 lexeme: format!("{}  {}", list_declaration, list_initialization),
                 line: self.line,
                 column: self.column,
+                original_line:original_line,
+                original_column:original_column
             });
             self.column += line.len();
             return true;
@@ -327,6 +339,7 @@ impl Scanner {
         self.line = 1;
         let lines: Vec<String> = self.code.split('\n').map(|s| s.to_string()).collect();
         for line in &lines {
+
             // Add whitespace around equal sign, semicolon, parentheses, and braces
             let line = line.replace("=", " = ")
                 .replace("+", " + ")
@@ -364,25 +377,38 @@ impl Scanner {
                 .replace("}", " } ")
                 .replace(",", " , ");
             self.code = line.clone();
-            if self.process_lists(&line) {
+            let original_lineL = self.line;
+            let original_columnL = self.column;
+            if self.process_lists(&line , original_lineL, original_columnL) {
                 continue;
             }
-            let potential_tokens: Vec<String> = self.split_into_tokens_custom(&[' ']);
-            for potential_token in potential_tokens {
+            let potential_tokens: Vec<(String, usize)> = self.split_into_tokens_with_positions(&[' ']);
+            for (potential_token, position) in potential_tokens {
 
-                if self.process_literals(&potential_token) {
+                let original_token = potential_token.clone();
+                let original_line = self.line;
+
+                let mut original_column = self.column + position;
+                if original_column > 0 {
+                    original_column -= 1;
+                }
+
+                let potential_token = potential_token.replace(" ", "");
+
+
+                if self.process_literals(&potential_token , original_line , original_column) {
                     continue;
                 }
-                if self.process_symbols(&potential_token) {
+                if self.process_symbols(&potential_token ,original_line, original_column) {
                     continue;
                 }
-                if self.process_identifiers(&potential_token) {
+                if self.process_identifiers(&potential_token, original_line, original_column) {
                     continue;
                 }
-                if self.process_reserved_words(&potential_token) {
+                if self.process_reserved_words(&potential_token,original_line, original_column) {
                     continue;
                 }
-                if self.process_variables(&potential_token) {
+                if self.process_variables(&potential_token,original_line, original_column) {
                     continue;
                 }
 

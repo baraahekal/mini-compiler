@@ -30,6 +30,8 @@ pub enum StmtNode {
     Assignment(String, ExprNode),
     ForLoop(Box<StmtNode>, Box<ExprNode>, Box<StmtNode>, Box<StmtNode>),
     IfStatement(ExprNode, Box<StmtNode>, Option<Box<StmtNode>>),
+    WhileLoop(Box<ExprNode>, Box<StmtNode>),
+    DoWhileLoop(Box<ExprNode>, Box<StmtNode>),
     Block(Vec<StmtNode>),
 }
 
@@ -117,7 +119,8 @@ impl Parser {
                 match token.token_type {
                     TokenType::For => self.parse_for_statement(),
                     TokenType::If => self.parse_if_statement(),
-                    // TokenType::While => self.parse_while_loop(),
+                    TokenType::Do => self.parse_do_while_loop(),
+                    TokenType::While => self.parse_while_loop(),
                     TokenType::OpenBrace => self.parse_block(),
                     _ => Err(self.error("Unexpected reserved word in statement", "Error")),
                 }
@@ -133,18 +136,23 @@ impl Parser {
             self.errors.push(self.error("Expected '{'", "Error"));
         }
 
-        println!("current parse_block: {:?}", self.current);
+        if self.is_at_end() {
+            return Err(self.error("Expected '}'", "Error"));
+        }
 
         while let Ok(stmt) = self.parse_statement() {
+
+        println!("current parse_block1: {:?}", self.current);
             statements.push(stmt);
             if self.match_token(TokenType::CloseBrace).is_some() {
                 break;
             }
         }
+        println!("current parse_block2: {:?}", self.current);
+
 
         Ok(StmtNode::Block(statements))
     }
-
 
     fn parse_declaration(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_type = self.tokens[self.current].token_type.clone();
@@ -189,7 +197,6 @@ impl Parser {
         self.declared_variables.insert(variable_name.clone(), variable_type);
         Ok(StmtNode::Assignment(variable_name, expr))
     }
-
 
     fn parse_assignment(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_name = self.tokens[self.current].lexeme.clone();
@@ -248,6 +255,7 @@ impl Parser {
 
         Ok(StmtNode::Assignment(variable_name, expr))
     }
+
     fn parse_expression(&mut self) -> Result<ExprNode, ErrorMessage> {
         let mut expr = self.parse_term()?;
 
@@ -421,8 +429,8 @@ impl Parser {
         }
 
         let then_branch = self.parse_block()?;
-        println!("current parse_if_statement: {:?}", self.current);
         self.current += 1;
+        println!("current parse_if_statement: {:?}", self.current);
         let else_branch = if self.match_token(TokenType::Else).is_some() {
             if self.match_token(TokenType::If).is_some() {
                 // Handle 'else if'
@@ -433,6 +441,8 @@ impl Parser {
                 Some(self.parse_block()?)
             }
         } else {
+            self.current -= 1;
+            println!("wedwefqwefqwefqwefpk3,ewplf,d1p3l,ef[p1l3,ef13[{:?}ple,f", self.current);
             None
         };
 
@@ -568,6 +578,56 @@ impl Parser {
         ))
     }
 
+    fn parse_while_loop(&mut self) -> Result<StmtNode, ErrorMessage> {
+        if self.match_token(TokenType::While).is_none() {
+            return Err(self.error("Expected 'while'", "Error"));
+        }
+
+        if self.match_token(TokenType::OpenParen).is_none() {
+            return Err(self.error("Expected '('", "Error"));
+        }
+
+        let condition = self.parse_condition()?;
+
+        if self.match_token(TokenType::CloseParen).is_none() {
+            return Err(self.error("Expected ')'", "Error"));
+        }
+
+        let body = self.parse_block()?;
+
+        Ok(StmtNode::WhileLoop(Box::new(condition), Box::new(body)))
+    }
+
+    fn parse_do_while_loop(&mut self) -> Result<StmtNode, ErrorMessage> {
+        if self.match_token(TokenType::Do).is_none() {
+            return Err(self.error("Expected 'do'", "Error"));
+        }
+
+        let body = self.parse_block()?;
+        self.current += 1;
+        println!("current parse_do_while_loop: {:?}", self.current);
+
+        if self.match_token(TokenType::While).is_none() {
+            return Err(self.error("Expected 'while'", "Error"));
+        }
+
+        if self.match_token(TokenType::OpenParen).is_none() {
+            return Err(self.error("Expected '('", "Error"));
+        }
+
+        let condition = self.parse_condition()?;
+
+        if self.match_token(TokenType::CloseParen).is_none() {
+            return Err(self.error("Expected ')'", "Error"));
+        }
+
+        if self.match_token(TokenType::Semicolon).is_none() {
+            return Err(self.error("Expected ';'", "Error"));
+        }
+
+        Ok(StmtNode::DoWhileLoop(Box::new(condition), Box::new(body)))
+    }
+
     fn is_at_end(&self) -> bool {
         // println!("current is_at_end: {:?}", self.current);
         // println!("tokens len: {:?}", self.tokens.len());
@@ -620,8 +680,9 @@ impl Parser {
         let error_message = ErrorMessage {
             message_type: message_type_.to_string(),
             message: format!("{}", message),
-            line: token.line,
-            column: token.column,
+            line: token.original_line,
+            column: token.original_column,
+
         };
         error_message
     }
