@@ -159,7 +159,7 @@ impl Parser {
     fn parse_block(&mut self, flag_do_while: i32) -> Result<StmtNode, ErrorMessage> {
         let mut statements = Vec::new();
 
-        // println!("ANAAAA DAKHAAAALT FOOOR LOOOOP {:?}", self.tokens[self.current].lexeme);
+        println!("ANAAAA DAKHAAAALT FOOOR LOOOOP {:?}", self.tokens[self.current].lexeme);
         if self.match_token(TokenType::OpenBrace).is_none() {
             println!("PLEEEEEEEEESEEEEE NNNNNNNOOOOOOOO open");
 
@@ -178,13 +178,19 @@ impl Parser {
 
             // println!("current Gaaaatttt: {:?}  {:?}", self.current, self.tokens[self.current]);
             statements.push(stmt);
+            if self.match_token(TokenType::Semicolon).is_some() {
+                println!("HOOOOHHHHHHHH");
+                self.current -= 1;
+                break;
+            }
+
             if self.match_token(TokenType::CloseBrace).is_some() {
                 self.current -= 1;
                 break;
             }
         }
 
-
+        println!("current parse_block: {:?} {:?}", self.current, self.tokens[self.current]);
         if self.match_token(TokenType::CloseBrace).is_none() {
             println!("PLEEEEEEEEESEEEEE NNNNNNNOOOOOOOO close");
             return Err(self.error("Expected '}'", "Error"));
@@ -205,6 +211,10 @@ impl Parser {
         }
         let variable_name = variable_token.lexeme;
         println!("variable_name: {:?}", variable_name);
+
+        if self.is_variable_declared(&variable_name) {
+            return Err(self.error(&format!("Variable '{}' already declared", variable_name), "Error"));
+        }
 
         self.current += 1; // Consume the variable
         println!("current token: {:?}", self.tokens[self.current]);
@@ -277,6 +287,7 @@ impl Parser {
         };
 
 
+        println!("current AFTER: {:?}", self.tokens[self.current]);
 
         let right_type = self.get_expr_type(&right)?;
         if right_type != variable_type && self.is_valid_variable_type(&variable_type){
@@ -290,7 +301,6 @@ impl Parser {
             }
         }
 
-        println!("current AFTER: {:?}", self.tokens[self.current]);
         let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
         if self.match_token(TokenType::Semicolon).is_none() {
             self.errors.push(self.error("Expected a semicolon", "Error"));
@@ -306,7 +316,7 @@ impl Parser {
             let right = self.parse_term()?;
             expr = ExprNode::Binary(Box::new(expr), operator, Box::new(right));
         }
-        println!("Valid expr");
+
         Ok(expr)
     }
 
