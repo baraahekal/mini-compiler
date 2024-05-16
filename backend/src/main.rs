@@ -4,6 +4,7 @@ use parser::Parser;
 mod parser;
 mod scanner;
 mod token;
+mod code_gen;
 
 #[tokio::main]
 async fn main() {

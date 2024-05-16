@@ -124,7 +124,7 @@ const CodeEditor = () => {
         <h2>Please Write Your Code here</h2>
           <Editor
             onMount={editorDidMount}
-            height={window.innerHeight / 2}
+            height={window.innerHeight / 2 + 100}
             width={window.innerWidth / 2}
             defaultLanguage="cpp"
             options={options}
