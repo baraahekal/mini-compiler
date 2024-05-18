@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import "./Tokenizer.css";
 import icon from "./icon.svg";
+import { Box, HStack } from "@chakra-ui/react";
+import Output from "./Output";
 
 
 const CodeEditor = () => {
@@ -9,6 +11,7 @@ const CodeEditor = () => {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const [typingTimeout, setTypingTimeout] = useState(null);
+  const [isError, setIsError] = useState(false);
 
   const options = {
     fontSize: 14,
@@ -33,6 +36,17 @@ const CodeEditor = () => {
           errors = [{ message: data, line: 1, column: 1 }];
         } else if (Array.isArray(data)) { 
           errors = data;
+        }
+
+
+
+        // Check if any of the errors have a message_type of 'Error'
+        const hasError = errors.some(error => error.message_type === 'Error');
+
+        if (hasError) {
+          setIsError(true);
+        } else {
+          setIsError(false);
         }
 
         const markers = errors.map(error => {
@@ -120,17 +134,35 @@ const CodeEditor = () => {
         <img src={icon} alt="Icon" width="40px" height="40px" />
         <h1>Mini-Compiler</h1>
       </div>
+
       <div className="tokenizer-container">
-        <h2>Please Write Your Code here</h2>
-          <Editor
-            onMount={editorDidMount}
-            height={window.innerHeight / 2 + 100}
-            width={window.innerWidth / 2}
-            defaultLanguage="cpp"
-            options={options}
-            defaultValue={code}
-            onChange={handleChange}
-          />
+        <Box w="70%">
+          <h2>Please Write Your Code here</h2>
+        </Box>
+        <HStack spacing={4}>
+
+        <Box
+              w="60%"
+              m={40}
+              p={5}
+              border="1px solid"
+              borderRadius={5}
+              borderColor={isError ? "#FF6037" : "#b8bb25"}
+          >
+
+            <Editor
+                onMount={editorDidMount}
+                height="75vh"
+                // width={window.innerWidth / 2}
+                defaultLanguage="cpp"
+                options={options}
+                defaultValue={code}
+                onChange={handleChange}
+            />
+          </Box>
+          <Output/>
+        </HStack>
+
       </div>
     </div>
   );

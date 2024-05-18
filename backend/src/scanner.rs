@@ -2,7 +2,6 @@ use warp::{Filter, Rejection, Reply};
 use serde::{Serialize, Deserialize};
 use crate::token::{Token, TokenType, TokenGlobal};
 use crate::parser::Parser;
-use crate::code_gen;
 use regex::Regex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -434,9 +433,9 @@ pub async fn scanning_input_code(code: Code) -> Result<impl Reply, Rejection> {
 
     let mut parser = Parser::new(tokens.tokens);
     match parser.parse_program() {
-        Ok(ast) => {
-            let output_code = code_gen::generate_code(ast);
-            Ok(warp::reply::json(&output_code))
+        Ok(_) => {
+            println!("Entered Ok match arm");
+            Ok(warp::reply::json(&"No errors found."))
         },
         Err(errors) => {
             println!("{:?}", errors);
