@@ -1,9 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::env::var;
 use crate::token::{Token, TokenType, TokenGlobal};
 use serde::Serialize;
 use warp::Filter;
-use crate::token::TokenType::Return;
 
 
 #[derive(Debug)]
@@ -23,6 +21,30 @@ pub enum ExprNode {
     StringIdentifier(String),
     DoubleIdentifier(String),
     CharIdentifier(String),
+}
+
+use std::fmt;
+
+impl fmt::Display for ExprNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExprNode::Add(left, right) => write!(f, "Add({}, {})", left, right),
+            ExprNode::LessThan(left, right) => write!(f, "LessThan({}, {})", left, right),
+            ExprNode::Binary(left, _, right) => write!(f, "Binary({}, {})", left, right),
+            ExprNode::IntLiteral(value) => write!(f, "{}", value),
+            ExprNode::FloatLiteral(value) => write!(f, "{}", value),
+            ExprNode::CharLiteral(value) => write!(f, "{}", value),
+            ExprNode::StringLiteral(value) => write!(f, "{}", value),
+            ExprNode::BoolLiteral(value) => write!(f, "{}", value),
+            ExprNode::Variable(name) => write!(f, "{}", name),
+            ExprNode::IntIdentifier(name) => write!(f, "{}", name),
+            ExprNode::FloatIdentifier(name) => write!(f, "{}", name),
+            ExprNode::BoolIdentifier(name) => write!(f, "{}", name),
+            ExprNode::StringIdentifier(name) => write!(f, "{}", name),
+            ExprNode::DoubleIdentifier(name) => write!(f, "{}", name),
+            ExprNode::CharIdentifier(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -48,10 +70,9 @@ pub struct ErrorMessage {
     column: usize,
 }
 
-
 pub struct Parser {
     tokens: Vec<Token>,
-    declared_variables: HashMap<String, TokenType>,
+    declared_variables: HashMap<String, (TokenType, String)>,
     current: usize,
     errors: Vec<ErrorMessage>,
 }
@@ -243,17 +264,15 @@ impl Parser {
         println!("after declaration: {:?}", self.current);
 
 
-        self.declared_variables.insert(variable_name.clone(), variable_type);
+        self.declared_variables.insert(variable_name.clone(), (variable_type.clone(), expr.to_string()));
         Ok(StmtNode::Assignment(variable_name, expr))
     }
 
     fn parse_assignment(&mut self) -> Result<StmtNode, ErrorMessage> {
-        let variable_name = self.tokens[self.current].lexeme.clone();
-        let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or(TokenType::Error);
+        let variable_name_before = self.tokens[self.current].lexeme.clone();
 
-        if !self.is_variable_declared(&variable_name) {
-            self.errors.push(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
-        }
+        let variable_type = self.get_variable_type(&variable_name_before)?;
+
         self.current += 1; // Consume the variable
 
         let operator = self.tokens[self.current].token_type.clone();
@@ -265,20 +284,73 @@ impl Parser {
             TokenType::Plus => {
                 if self.tokens[self.current].token_type == TokenType::Plus {
                     self.current += 1; // Consume the second '+'
+                    let updated_value = match self.declared_variables.get(&variable_name_before) {
+                        Some(value) => match value.1.parse::<i32>() {
+                            Ok(parsed_value) => parsed_value + 1,
+                            Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                        },
+                        None => return Err(self.error("Variable not found", "Error")),
+                    };
+                    self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
                     ExprNode::IntLiteral(1) // Handle i++
                 } else if self.tokens[self.current].token_type == TokenType::Assignment {
                     self.current += 1; // Consume the '='
+                    let increment_value = match self.tokens[self.current].lexeme.parse::<i32>() {
+                        Ok(value) => value,
+                        Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                    };
+                    let updated_value = match self.declared_variables.get(&variable_name_before) {
+                        Some(value) => match value.1.parse::<i32>() {
+                            Ok(parsed_value) => parsed_value + increment_value,
+                            Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                        },
+                        None => return Err(self.error("Variable not found", "Error")),
+                    };
+                    self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
                     self.parse_expression()? // Handle i += 1
                 } else {
                     return Err(self.error("Expected '+' or '=' after '+'", "Error"));
                 }
             },
-            TokenType::Assignment => {
+            TokenType::Assignment => { // x = x + 1
                 if self.tokens[self.current].token_type == TokenType::Variable
-                    && self.tokens[self.current].lexeme == variable_name
+                    && self.is_variable_declared(&self.tokens[self.current].lexeme)
                     && self.tokens[self.current + 1].token_type == TokenType::Plus {
-                    self.current += 3; // Consume the variable, '+', and the number
-                    ExprNode::IntLiteral(self.tokens[self.current - 1].lexeme.parse::<i32>().unwrap()) // Handle i = i + 1
+                    let variable_name = self.tokens[self.current].lexeme.clone();
+                    self.current += 2; // Consume the variable and '+'
+                    if  TokenType::IntegerLiteral == self.tokens[self.current].token_type
+                        || TokenType::Variable == self.tokens[self.current].token_type {
+
+                        let increment_value = match self.tokens[self.current].token_type {
+                            TokenType::IntegerLiteral => self.tokens[self.current].lexeme.parse::<i32>().unwrap_or_default(),
+                            TokenType::Variable => {
+                                let variable_name = &self.tokens[self.current].lexeme;
+                                match self.declared_variables.get(variable_name) {
+                                    Some((_, value)) => value.parse::<i32>().unwrap_or_default(),
+                                    None => return Err(self.error("Variable not found", "Error")),
+                                }
+                            },
+                            _ => return Err(self.error("Expected a valid integer or variable", "Error")),
+                        };
+
+                        println!("Before {}", self.declared_variables.get(&variable_name).unwrap().1);
+                        let variable_value = match self.declared_variables.get(&variable_name) {
+                            Some(value) => match value.1.parse::<i32>() {
+                                Ok(parsed_value) => parsed_value,
+                                Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                            },
+                            None => return Err(self.error("Variable not found", "Error")),
+                        };
+                        let updated_value = variable_value + increment_value;
+                        self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
+                        println!("After {}", self.declared_variables.get(&variable_name).unwrap().1);
+                        self.current += 1;
+                        ExprNode::IntLiteral(updated_value) // Handle i = i + n
+                    } else {
+                        return Err(self.error("Expected an integer after '+'", "Error"));
+                    }
+
+
                 } else {
                     self.parse_expression()? // Handle i = expression
                 }
@@ -287,7 +359,7 @@ impl Parser {
         };
 
 
-        println!("current AFTER: {:?}", self.tokens[self.current]);
+        // println!("current AFTER: {:?}", self.tokens[self.current]);
 
         let right_type = self.get_expr_type(&right)?;
         if right_type != variable_type && self.is_valid_variable_type(&variable_type){
@@ -301,12 +373,13 @@ impl Parser {
             }
         }
 
-        let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
+        let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name_before.clone())), operator, Box::new(right));
         if self.match_token(TokenType::Semicolon).is_none() {
             self.errors.push(self.error("Expected a semicolon", "Error"));
         }
+        self.current -= 1;
 
-        Ok(StmtNode::Assignment(variable_name, expr))
+        Ok(StmtNode::Assignment(variable_name_before, expr))
     }
 
     fn parse_expression(&mut self) -> Result<ExprNode, ErrorMessage> {
@@ -512,7 +585,7 @@ impl Parser {
             self.errors.push(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
-        self.declared_variables.insert(variable_name.clone(), variable_type.clone());
+        self.declared_variables.get(&variable_name).cloned().map(|(token_type, _)| token_type).ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"));
 
         let assignment = self.parse_assignment_without_semicolon()?;
 
@@ -521,7 +594,7 @@ impl Parser {
 
     fn parse_assignment_without_semicolon(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_name = self.tokens[self.current].lexeme.clone();
-        let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or(TokenType::Error);
+        let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or((TokenType::Error, "none".to_string())).0;
 
         if !self.is_variable_declared(&variable_name) {
             self.errors.push(self.error(&format!("Use of undeclared variable '{}'", variable_name), "Error"));
@@ -802,7 +875,16 @@ impl Parser {
     }
 
     fn get_variable_type(&self, variable_name: &str) -> Result<TokenType, ErrorMessage> {
-        self.declared_variables.get(variable_name).cloned().ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"))
+        self.declared_variables.get(variable_name).cloned().map(|(token_type, _)| token_type).ok_or_else(|| self.error(&format!("use of undeclared variable '{}'", variable_name), "Error"))
+    }
+
+    pub fn update_variable_value(&mut self, variable_name: String, new_value: String) -> Result<(), ErrorMessage> {
+        if let Some((token_type, _)) = self.declared_variables.get(&variable_name) {
+            self.declared_variables.insert(variable_name, (token_type.clone(), new_value));
+            Ok(())
+        } else {
+            Err(self.error(&format!("Undeclared variable '{}'", variable_name), "Error"))
+        }
     }
 
     fn get_expr_type(&self, expr: &ExprNode) -> Result<TokenType, ErrorMessage> {
@@ -814,6 +896,10 @@ impl Parser {
             ExprNode::Variable(name) => self.get_variable_type(name),
             _ => Err(self.error("Expression is not a literal or a variable", "Error")),
         }
+    }
+
+    pub fn get_declared_variables(&self) -> HashMap<String, (TokenType, String)> {
+        self.declared_variables.clone()
     }
 
     fn error(&self, message: &str, message_type_: &str) -> ErrorMessage {

@@ -434,8 +434,9 @@ pub async fn scanning_input_code(code: Code) -> Result<impl Reply, Rejection> {
     let mut parser = Parser::new(tokens.tokens);
     match parser.parse_program() {
         Ok(_) => {
+            let vars = parser.get_declared_variables();
             println!("Entered Ok match arm");
-            Ok(warp::reply::json(&"No errors found."))
+            Ok(warp::reply::json(&vars))
         },
         Err(errors) => {
             println!("{:?}", errors);
