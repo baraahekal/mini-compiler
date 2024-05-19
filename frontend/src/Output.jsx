@@ -1,9 +1,8 @@
-import { Box, Button, Text } from "@chakra-ui/react";
+import { Box, Text } from "@chakra-ui/react";
 
-const Output = () => {
+const Output = ({ declaredVariables }) => {
     return (
         <Box w="30%">
-
             <Box
                 height="75vh"
                 p={2}
@@ -13,7 +12,9 @@ const Output = () => {
                 borderColor= "#A0C9CB"
                 backgroundColor="#282828"
             >
-
+                {Object.entries(declaredVariables).map(([variable, value]) => (
+                    <Text key={variable}>{`${variable}: ${value}`}</Text>
+                ))}
             </Box>
         </Box>
     );

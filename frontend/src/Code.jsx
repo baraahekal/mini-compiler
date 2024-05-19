@@ -12,6 +12,8 @@ const CodeEditor = () => {
   const monacoRef = useRef(null);
   const [typingTimeout, setTypingTimeout] = useState(null);
   const [isError, setIsError] = useState(false);
+  const [declaredVariables, setDeclaredVariables] = useState({});
+
 
   const options = {
     fontSize: 14,
@@ -36,10 +38,11 @@ const CodeEditor = () => {
           errors = [{ message: data, line: 1, column: 1 }];
         } else if (Array.isArray(data)) { 
           errors = data;
+        } else {
+          setDeclaredVariables(data);
         }
 
-
-
+        // console.log("i got into ok")
         // Check if any of the errors have a message_type of 'Error'
         const hasError = errors.some(error => error.message_type === 'Error');
 
@@ -50,6 +53,10 @@ const CodeEditor = () => {
         }
 
         const markers = errors.map(error => {
+          if (!error) {
+            return;
+          }
+
           let errorMessage = error.message;
           try {
             const parsedMessage = JSON.parse(errorMessage);
@@ -70,7 +77,7 @@ const CodeEditor = () => {
               severity = monacoRef.current.MarkerSeverity.Error;
               break;
           }
-          
+
           return {
             startLineNumber: error.line,
             startColumn: error.column + 1,
@@ -79,12 +86,12 @@ const CodeEditor = () => {
             severity: severity,
             message: errorMessage
           };
-        });
-        if (errors[0].message === 'No errors found.') {
+        }).filter(Boolean); // filter out any undefined values
+        if (errors.length > 0 && errors[0] && errors[0].message === 'No errors found.') {
           monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', []);
         } else {
           monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'owner', markers);
-        }     
+        }
        }
     } catch (error) {
       console.error('Failed to fetch:', error);
@@ -160,7 +167,7 @@ const CodeEditor = () => {
                 onChange={handleChange}
             />
           </Box>
-          <Output/>
+          <Output declaredVariables={declaredVariables}/>
         </HStack>
 
       </div>
