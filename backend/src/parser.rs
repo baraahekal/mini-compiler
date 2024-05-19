@@ -4,7 +4,7 @@ use serde::Serialize;
 use warp::Filter;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExprNode {
     Add(Box<ExprNode>, Box<ExprNode>),
     LessThan(Box<ExprNode>, Box<ExprNode>),
@@ -312,6 +312,37 @@ impl Parser {
                     return Err(self.error("Expected '+' or '=' after '+'", "Error"));
                 }
             },
+            TokenType::Minus => {
+                if self.tokens[self.current].token_type == TokenType::Minus {
+                    self.current += 1; // Consume the second '+'
+                    let updated_value = match self.declared_variables.get(&variable_name_before) {
+                        Some(value) => match value.1.parse::<i32>() {
+                            Ok(parsed_value) => parsed_value - 1,
+                            Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                        },
+                        None => return Err(self.error("Variable not found", "Error")),
+                    };
+                    self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
+                    ExprNode::IntLiteral(1) // Handle i++
+                } else if self.tokens[self.current].token_type == TokenType::Assignment {
+                    self.current += 1; // Consume the '='
+                    let increment_value = match self.tokens[self.current].lexeme.parse::<i32>() {
+                        Ok(value) => value,
+                        Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                    };
+                    let updated_value = match self.declared_variables.get(&variable_name_before) {
+                        Some(value) => match value.1.parse::<i32>() {
+                            Ok(parsed_value) => parsed_value - increment_value,
+                            Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                        },
+                        None => return Err(self.error("Variable not found", "Error")),
+                    };
+                    self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
+                    self.parse_expression()? // Handle i += 1
+                } else {
+                    return Err(self.error("Expected '+' or '=' after '+'", "Error"));
+                }
+            },
             TokenType::Assignment => { // x = x + 1
                 if self.tokens[self.current].token_type == TokenType::Variable
                     && self.is_variable_declared(&self.tokens[self.current].lexeme)
@@ -342,6 +373,45 @@ impl Parser {
                             None => return Err(self.error("Variable not found", "Error")),
                         };
                         let updated_value = variable_value + increment_value;
+                        self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
+                        println!("After {}", self.declared_variables.get(&variable_name).unwrap().1);
+                        self.current += 1;
+                        ExprNode::IntLiteral(updated_value) // Handle i = i + n
+                    } else {
+                        return Err(self.error("Expected an integer after '+'", "Error"));
+                    }
+
+
+                }
+                else if self.tokens[self.current].token_type == TokenType::Variable
+                    && self.is_variable_declared(&self.tokens[self.current].lexeme)
+                        && self.tokens[self.current + 1].token_type == TokenType::Minus {
+                    let variable_name = self.tokens[self.current].lexeme.clone();
+                    self.current += 2; // Consume the variable and '+'
+                    if  TokenType::IntegerLiteral == self.tokens[self.current].token_type
+                        || TokenType::Variable == self.tokens[self.current].token_type {
+
+                        let increment_value = match self.tokens[self.current].token_type {
+                            TokenType::IntegerLiteral => self.tokens[self.current].lexeme.parse::<i32>().unwrap_or_default(),
+                            TokenType::Variable => {
+                                let variable_name = &self.tokens[self.current].lexeme;
+                                match self.declared_variables.get(variable_name) {
+                                    Some((_, value)) => value.parse::<i32>().unwrap_or_default(),
+                                    None => return Err(self.error("Variable not found", "Error")),
+                                }
+                            },
+                            _ => return Err(self.error("Expected a valid integer or variable", "Error")),
+                        };
+
+                        println!("Before {}", self.declared_variables.get(&variable_name).unwrap().1);
+                        let variable_value = match self.declared_variables.get(&variable_name) {
+                            Some(value) => match value.1.parse::<i32>() {
+                                Ok(parsed_value) => parsed_value,
+                                Err(_) => return Err(self.error("Expected a valid integer", "Error")),
+                            },
+                            None => return Err(self.error("Variable not found", "Error")),
+                        };
+                        let updated_value = variable_value - increment_value;
                         self.update_variable_value(variable_name_before.clone(), updated_value.to_string())?;
                         println!("After {}", self.declared_variables.get(&variable_name).unwrap().1);
                         self.current += 1;
@@ -585,15 +655,18 @@ impl Parser {
             self.errors.push(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
+        self.declared_variables.insert(variable_name.clone(), (variable_type.clone(), "none".to_string()));
         self.declared_variables.get(&variable_name).cloned().map(|(token_type, _)| token_type).ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"));
 
         let assignment = self.parse_assignment_without_semicolon()?;
+
 
         Ok(assignment)
     }
 
     fn parse_assignment_without_semicolon(&mut self) -> Result<StmtNode, ErrorMessage> {
         let variable_name = self.tokens[self.current].lexeme.clone();
+
         let variable_type = self.declared_variables.get(&variable_name).cloned().unwrap_or((TokenType::Error, "none".to_string())).0;
 
         if !self.is_variable_declared(&variable_name) {
@@ -616,6 +689,17 @@ impl Parser {
                     return Err(self.error("Expected '+' or '=' after '+'", "Error"));
                 }
             },
+            TokenType::Minus => {
+                if self.tokens[self.current].token_type == TokenType::Minus {
+                    self.current += 1; // Consume the second '+'
+                    ExprNode::IntLiteral(-1) // Handle i++
+                } else if self.tokens[self.current].token_type == TokenType::Assignment {
+                    self.current += 1; // Consume the '='
+                    self.parse_expression()? // Handle i += 1
+                } else {
+                    return Err(self.error("Expected '+' or '=' after '+'", "Error"));
+                }
+            },
             TokenType::Assignment => {
                 if self.tokens[self.current].token_type == TokenType::Variable
                     && self.tokens[self.current].lexeme == variable_name
@@ -629,7 +713,8 @@ impl Parser {
             _ => return Err(self.error("Expected an assignment operator", "Error")),
         };
 
-        let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right));
+        let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right.clone()));
+        self.declared_variables.insert(variable_name.clone(), (variable_type.clone(), right.to_string()));
 
         Ok(StmtNode::Assignment(variable_name, expr))
     }
