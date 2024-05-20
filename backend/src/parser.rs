@@ -180,7 +180,6 @@ impl Parser {
     fn parse_block(&mut self, flag_do_while: i32) -> Result<StmtNode, ErrorMessage> {
         let mut statements = Vec::new();
 
-        println!("ANAAAA DAKHAAAALT FOOOR LOOOOP {:?}", self.tokens[self.current].lexeme);
         if self.match_token(TokenType::OpenBrace).is_none() {
             println!("PLEEEEEEEEESEEEEE NNNNNNNOOOOOOOO open");
 
@@ -188,6 +187,7 @@ impl Parser {
         }
 
         if self.is_at_end() {
+            println!("a7a");
             return Err(self.error("Expected '}'", "Error"));
         }
 
@@ -201,7 +201,6 @@ impl Parser {
             statements.push(stmt);
             if self.match_token(TokenType::Semicolon).is_some() {
                 println!("HOOOOHHHHHHHH");
-                self.current -= 1;
                 break;
             }
 
@@ -557,24 +556,61 @@ impl Parser {
 
         let right = self.parse_expression()?;
 
+        // Evaluate the condition if left and right are variables
+        let left_value = match &left {
+            ExprNode::Variable(name) => self.declared_variables.get(name).map(|(_, value)| value.parse::<i32>().unwrap_or_default()),
+            _ => None,
+        };
+        let right_value = match &right {
+            ExprNode::Variable(name) => self.declared_variables.get(name).map(|(_, value)| value.parse::<i32>().unwrap_or_default()),
+            ExprNode::IntLiteral(value) => Some(*value),
+            _ => None,
+        };
+
+        if let (Some(left_value), Some(right_value)) = (left_value, right_value) {
+            let result = match operator {
+                TokenType::Equal => left_value == right_value,
+                TokenType::NotEqual => left_value != right_value,
+                TokenType::LessThan => left_value < right_value,
+                TokenType::LessThanOrEqual => left_value <= right_value,
+                TokenType::GreaterThan => left_value > right_value,
+                TokenType::GreaterThanOrEqual => left_value >= right_value,
+                _ => return Err(self.error("Invalid comparison operator", "Error")),
+            };
+            return Ok(ExprNode::BoolLiteral(result));
+        }
+
         Ok(ExprNode::Binary(Box::new(left), operator, Box::new(right)))
     }
 
-    fn parse_condition(&mut self) -> Result<(ExprNode), ErrorMessage> {
+    fn parse_condition(&mut self) -> Result<ExprNode, ErrorMessage> {
         let current = self.current;
         match self.parse_comparison() {
             Ok(comparison) => {
                 if let ExprNode::Binary(left, operator, right) = &comparison {
-                    if let (ExprNode::IntLiteral(l_val), ExprNode::IntLiteral(r_val)) = (&**left, &**right) {
-                        match operator {
-                            TokenType::GreaterThan if l_val > r_val => (),
-                            TokenType::LessThan if l_val < r_val => self.errors.push(self.error("Warning: This condition is always true", "Warning")),
-                            TokenType::Equal if l_val == r_val => (),
-                            TokenType::NotEqual if l_val != r_val => (),
-                            TokenType::GreaterThanOrEqual if l_val >= r_val => (),
-                            TokenType::LessThanOrEqual if l_val <= r_val => self.errors.push(self.error("Warning: This condition is always true", "Warning")),
-                            _ => self.errors.push(self.error("Warning: This condition is always false", "Warning")),
-                        }
+                    let left_value = match &**left {
+                        ExprNode::Variable(name) => self.declared_variables.get(name).map(|(_, value)| value.parse::<i32>().unwrap_or_default()),
+                        ExprNode::IntLiteral(value) => Some(*value),
+                        _ => None,
+                    };
+                    let right_value = match &**right {
+                        ExprNode::Variable(name) => self.declared_variables.get(name).map(|(_, value)| value.parse::<i32>().unwrap_or_default()),
+                        ExprNode::IntLiteral(value) => Some(*value),
+                        _ => None,
+                    };
+
+
+                    if let (Some(left_value), Some(right_value)) = (left_value, right_value) {
+                        let result = match operator {
+                            TokenType::GreaterThan => left_value > right_value,
+                            TokenType::LessThan => left_value < right_value,
+                            TokenType::Equal => left_value == right_value,
+                            TokenType::NotEqual => left_value != right_value,
+                            TokenType::GreaterThanOrEqual => left_value >= right_value,
+                            TokenType::LessThanOrEqual => left_value <= right_value,
+                            _ => return Err(self.error("Invalid comparison operator", "Error")),
+                        };
+                        return Ok(ExprNode::BoolLiteral(result));
                     }
                 }
                 Ok(comparison)
@@ -655,8 +691,8 @@ impl Parser {
             self.errors.push(self.error("Expected a variable", "Error"));
         }
         let variable_name = variable_token.lexeme;
-        self.declared_variables.insert(variable_name.clone(), (variable_type.clone(), "none".to_string()));
-        self.declared_variables.get(&variable_name).cloned().map(|(token_type, _)| token_type).ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"));
+            self.declared_variables.insert(variable_name.clone(), (variable_type.clone(), "none".to_string()));
+            self.declared_variables.get(&variable_name).cloned().map(|(token_type, _)| token_type).ok_or_else(|| self.error(&format!("Undeclared variable '{}'", variable_name), "Error"));
 
         let assignment = self.parse_assignment_without_semicolon()?;
 
@@ -681,10 +717,21 @@ impl Parser {
             TokenType::Plus => {
                 if self.tokens[self.current].token_type == TokenType::Plus {
                     self.current += 1; // Consume the second '+'
-                    ExprNode::IntLiteral(1) // Handle i++
+                    let val = self.get_variable_value(&variable_name);
+                    let int_val = val.and_then(|v| v.parse::<i32>().ok());
+                    ExprNode::IntLiteral(int_val.unwrap() + 1) // Handle i++
                 } else if self.tokens[self.current].token_type == TokenType::Assignment {
-                    self.current += 1; // Consume the '='
-                    self.parse_expression()? // Handle i += 1
+                    self.current += 1; // Consume the '=' i+=1
+                    let increment_value = match self.parse_expression()? {
+                        ExprNode::IntLiteral(value) => value,
+                        _ => return Err(self.error("Expected an integer value for increment", "Error")),
+                    };
+                    let current_value = self.get_variable_value(&variable_name)
+                        .and_then(|v| v.parse::<i32>().ok())
+                        .unwrap_or(0);
+                    let updated_value = current_value + increment_value;
+                    self.update_variable_value(variable_name.clone(), updated_value.to_string())?;
+                    ExprNode::IntLiteral(updated_value) // Handle i += value
                 } else {
                     return Err(self.error("Expected '+' or '=' after '+'", "Error"));
                 }
@@ -692,20 +739,28 @@ impl Parser {
             TokenType::Minus => {
                 if self.tokens[self.current].token_type == TokenType::Minus {
                     self.current += 1; // Consume the second '+'
-                    ExprNode::IntLiteral(-1) // Handle i++
+                    let val = self.get_variable_value(&variable_name);
+                    let int_val = val.and_then(|v| v.parse::<i32>().ok());
+                    ExprNode::IntLiteral(int_val.unwrap() - 1) // Handle i--
                 } else if self.tokens[self.current].token_type == TokenType::Assignment {
                     self.current += 1; // Consume the '='
-                    self.parse_expression()? // Handle i += 1
+                    self.parse_expression()? // Handle i -= 1
                 } else {
                     return Err(self.error("Expected '+' or '=' after '+'", "Error"));
                 }
             },
-            TokenType::Assignment => {
+            TokenType::Assignment => { // x = x + 1
                 if self.tokens[self.current].token_type == TokenType::Variable
-                    && self.tokens[self.current].lexeme == variable_name
-                    && self.tokens[self.current + 1].token_type == TokenType::Plus {
-                    self.current += 3; // Consume the variable, '+', and the number
-                    ExprNode::IntLiteral(self.tokens[self.current - 1].lexeme.parse::<i32>().unwrap()) // Handle i = i + 1
+                    && self.is_variable_declared(&self.tokens[self.current].lexeme) {
+                    let variable_name = self.tokens[self.current].lexeme.clone();
+                    self.current += 1; // Consume the variable
+                    let variable_value = match self.declared_variables.get(&variable_name) {
+                        Some((_, value)) => value.parse::<i32>().unwrap_or(0),
+                        None => return Err(self.error("Variable not found", "Error")),
+                    };
+                    let updated_value = variable_value + 1;
+                    self.update_variable_value(variable_name.clone(), updated_value.to_string())?;
+                    ExprNode::IntLiteral(updated_value) // Handle i = i + 1
                 } else {
                     self.parse_expression()? // Handle i = expression
                 }
@@ -713,7 +768,10 @@ impl Parser {
             _ => return Err(self.error("Expected an assignment operator", "Error")),
         };
 
+
+
         let expr = ExprNode::Binary(Box::new(ExprNode::Variable(variable_name.clone())), operator, Box::new(right.clone()));
+
         self.declared_variables.insert(variable_name.clone(), (variable_type.clone(), right.to_string()));
 
         Ok(StmtNode::Assignment(variable_name, expr))
@@ -733,15 +791,23 @@ impl Parser {
     }
 
     fn parse_for_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
+        let mut initialization: Option<StmtNode> = None;
+        let mut condition: Option<ExprNode> = None;
+        let mut increment: Option<StmtNode> = None;
+        let mut statement = StmtNode::Block(vec![]);
+
+        // Parsing the 'for' keyword
         if self.match_token(TokenType::For).is_none() {
             self.errors.push(self.error("Expected 'for'", "Error"));
         }
 
+        // Parsing the '('
         if self.match_token(TokenType::OpenParen).is_none() {
             self.errors.push(self.error("Expected '('", "Error"));
         }
 
-        let initialization = if self.tokens[self.current].token_type != TokenType::Semicolon {
+        // Parsing initialization
+        initialization = if self.tokens[self.current].token_type != TokenType::Semicolon {
             if self.tokens[self.current].token_global == TokenGlobal::Identifier {
                 Some(self.parse_declaration_without_semicolon()?)
             } else {
@@ -751,42 +817,84 @@ impl Parser {
             None
         };
 
+        // Parsing the first ';'
         if self.match_token(TokenType::Semicolon).is_none() {
             self.errors.push(self.error("Expected ';'", "Error"));
         }
 
-        let condition = if self.tokens[self.current].token_type != TokenType::Semicolon {
-            let condition = self.parse_condition()?;
-            match &condition {
-                ExprNode::BoolLiteral(value) => {
-                    if *value {
-                        self.errors.push(self.error("Warning: Endless loop", "Warning"));
-                    }
-                },
-                _ => (),
+            let mut last_token_loop = self.current;
+        'parse_for: loop {
+            let before_cond = self.current;
+            let mut ret = false;
+            println!(" NOTOTOTOTOTOTO   {}", self.current);
+            // Parsing the condition
+            condition = if self.tokens[self.current].token_type != TokenType::Semicolon {
+                let condition_expr = self.parse_condition()?;
+                match &condition_expr {
+                    ExprNode::BoolLiteral(value) => {
+                        if *value {
+                            ret = true;
+                        } else {
+                            println!("Value boolean {:?}", *value);
+                        }
+                    },
+                    _ => (),
+                }
+                Some(condition_expr)
+            } else {
+                None
+            };
+
+
+
+            // Parsing the second ';'
+            if self.match_token(TokenType::Semicolon).is_none() {
+                self.errors.push(self.error("Expected ';'", "Error"));
             }
-            Some(condition)
-        } else {
-            None
-        };
 
-        if self.match_token(TokenType::Semicolon).is_none() {
-            self.errors.push(self.error("Expected ';'", "Error"));
+            if ret {
+                let increment = if self.tokens[self.current].token_type != TokenType::CloseParen {
+                    Some(self.parse_assignment_without_semicolon()?)
+                } else {
+                    None
+                };
+
+            } else {
+                self.current += 3;
+            }
+            println!("{}", self.declared_variables.get("i").unwrap().1);
+
+
+            // Parsing the ')'
+            if self.match_token(TokenType::CloseParen).is_none() {
+                self.errors.push(self.error("Expected ')'", "Error"));
+            }
+
+
+            // Parsing the statement block
+
+            if ret {
+                statement = self.parse_block(0)?;
+            }
+            if ret == false {
+                println!("laaaaaaasssstttt {}", last_token_loop);
+
+                self.current = last_token_loop;
+
+                break
+            }
+            println!("i value: {:?}", self.declared_variables.get("i").unwrap().1);
+
+            // Check the condition and decide whether to loop again
+            if ret {
+                last_token_loop = self.current - 1;
+                self.current = before_cond;
+                ret = false;
+                continue 'parse_for;
+            }
+
+            break 'parse_for;
         }
-
-        let increment = if self.tokens[self.current].token_type != TokenType::CloseParen {
-            Some(self.parse_assignment_without_semicolon()?)
-        } else {
-            None
-        };
-
-        if self.match_token(TokenType::CloseParen).is_none() {
-            self.errors.push(self.error("Expected ')'", "Error"));
-        }
-
-        let statement = self.parse_block(0)?;
-        println!("current after FOR LOOP: {:?}", self.current);
-
 
         Ok(StmtNode::ForLoop(
             initialization.map(Box::new).unwrap_or(Box::new(StmtNode::Block(vec![]))),
@@ -795,6 +903,7 @@ impl Parser {
             Box::new(statement)
         ))
     }
+
 
     fn parse_while_loop(&mut self) -> Result<StmtNode, ErrorMessage> {
         println!("ANA GEEEEEEET");
@@ -981,6 +1090,10 @@ impl Parser {
             ExprNode::Variable(name) => self.get_variable_type(name),
             _ => Err(self.error("Expression is not a literal or a variable", "Error")),
         }
+    }
+
+    pub fn get_variable_value(&self, variable_name: &str) -> Option<String> {
+        self.declared_variables.get(variable_name).map(|(_, value)| value.clone())
     }
 
     pub fn get_declared_variables(&self) -> HashMap<String, (TokenType, String)> {
