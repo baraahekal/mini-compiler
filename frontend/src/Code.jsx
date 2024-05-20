@@ -12,8 +12,7 @@ const CodeEditor = () => {
   const monacoRef = useRef(null);
   const [typingTimeout, setTypingTimeout] = useState(null);
   const [isError, setIsError] = useState(false);
-  const [declaredVariables, setDeclaredVariables] = useState({});
-
+  const [parserData, setParserData] = useState({ vars: {}, lists: [] });
 
   const options = {
     fontSize: 14,
@@ -39,7 +38,7 @@ const CodeEditor = () => {
         } else if (Array.isArray(data)) { 
           errors = data;
         } else {
-          setDeclaredVariables(data);
+          setParserData(data);
         }
 
         // console.log("i got into ok")
@@ -167,7 +166,7 @@ const CodeEditor = () => {
                 onChange={handleChange}
             />
           </Box>
-          <Output declaredVariables={declaredVariables}/>
+          <Output parserData={parserData} />
         </HStack>
 
       </div>
