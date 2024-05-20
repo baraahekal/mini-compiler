@@ -1,4 +1,5 @@
-use warp::{Filter, Rejection, Reply};
+use std::collections::{HashMap, HashSet};
+use warp::{Rejection, Reply};
 use serde::{Serialize, Deserialize};
 use crate::token::{Token, TokenType, TokenGlobal};
 use crate::parser::Parser;
@@ -33,41 +34,42 @@ impl Scanner {
             column: 0,
         }
     }
-    fn split_into_tokens_with_positions(&self, split_chars: &[char]) -> Vec<(String, usize)> {
+    fn split_into_tokens_with_positions(&self) -> Vec<(String, usize)> {
         let mut tokens = Vec::new();
-        let mut token = String::new();
+        let mut start = 0;
         let mut in_string_literal = false;
         let mut in_brackets = false;
         let mut in_braces = false;
-        let mut column = 0;
 
-        for c in self.code.chars() {
-            if c == '"' {
-                in_string_literal = !in_string_literal;
-            } else if c == '[' {
-                in_brackets = true;
-            } else if c == ']' {
-                in_brackets = false;
-            } else if c == '{' {
-                in_braces = true;
-            } else if c == '}' {
-                in_braces = false;
+        for (i, c) in self.code.char_indices() {
+            match c {
+                '"' => in_string_literal = !in_string_literal,
+                '[' | ']' => {
+                    if start != i {
+                        let token = &self.code[start..i];
+                        tokens.push((token.to_string(), start));
+                    }
+                    start = i;
+                },
+                '{' => in_braces = true,
+                '}' => in_braces = false,
+                _ => (),
             }
 
-            if in_string_literal || in_brackets || in_braces || !split_chars.contains(&c) {
-                token.push(c);
-            } else if !token.is_empty() {
-                tokens.push((token.clone(), column - token.len() ));
-                token.clear();
+            if !in_string_literal && !in_brackets && !in_braces && c.is_whitespace() {
+                if start != i {
+                    let token = &self.code[start..i];
+                    tokens.push((token.to_string(), start));
+                }
+                start = i + 1;
             }
-
-            column += 1;
         }
 
-        if !token.is_empty() {
-            let token_len = token.len();
-            tokens.push((token.clone(), column - token_len )); // +1 because column is 0-indexed
+        if start != self.code.len() {
+            let token = &self.code[start..];
+            tokens.push((token.to_string(), start));
         }
+
         tokens
     }
 
@@ -150,6 +152,7 @@ impl Scanner {
             self.column += potential_token.len();
             return true;
         } else if potential_token.parse::<i32>().is_ok() {
+            println!("FUCKYEAH");
             self.tokens.tokens.push(Token {
                 token_type: TokenType::IntegerLiteral,
                 token_global: TokenGlobal::Literal,
@@ -293,7 +296,7 @@ impl Scanner {
 
     fn process_variables(&mut self, potential_token: &str, original_line: usize, original_column: usize) -> bool {
         // Check if the word is not an identifier or reserved word before classifying it as a variable
-        if !self.tokens.tokens.iter().any(|token| token.lexeme == potential_token && (matches!(token.token_global, TokenGlobal::Identifier) || matches!(token.token_global, TokenGlobal::ReservedWord))) && (Regex::new(r"^[a-zA-Z]").unwrap().is_match(potential_token) || potential_token.starts_with('_')) {
+        if !self.tokens.tokens.iter().any(|token| token.lexeme == potential_token && (matches!(token.token_global, TokenGlobal::Identifier) || matches!(token.token_global, TokenGlobal::ReservedWord))) && (Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap().is_match(potential_token) || potential_token.starts_with('_') || Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*\[\d+\]$").unwrap().is_match(potential_token)) {
             self.tokens.tokens.push(Token {
                 token_type: TokenType::Variable,
                 token_global: TokenGlobal::Variable,
@@ -385,7 +388,7 @@ impl Scanner {
             if self.process_lists(&line , original_lineL, original_columnL) {
                 continue;
             }
-            let potential_tokens: Vec<(String, usize)> = self.split_into_tokens_with_positions(&[' ']);
+            let potential_tokens: Vec<(String, usize)> = self.split_into_tokens_with_positions();
             for (potential_token, position) in potential_tokens {
 
                 let original_token = potential_token.clone();
@@ -423,6 +426,12 @@ impl Scanner {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParserData {
+    vars: HashMap<String, (TokenType, String)>,
+    lists: HashMap<String, Vec<i32>>,
+}
+
 pub async fn scanning_input_code(code: Code) -> Result<impl Reply, Rejection> {
     let mut scanner = Scanner::new(code.code);
     let tokens = scanner.scan();
@@ -435,8 +444,10 @@ pub async fn scanning_input_code(code: Code) -> Result<impl Reply, Rejection> {
     match parser.parse_program() {
         Ok(_) => {
             let vars = parser.get_declared_variables();
+            let lists = parser.get_declared_lists();
             println!("Entered Ok match arm");
-            Ok(warp::reply::json(&vars))
+            let data = ParserData { vars, lists };
+            Ok(warp::reply::json(&data))
         },
         Err(errors) => {
             println!("{:?}", errors);

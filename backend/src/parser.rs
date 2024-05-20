@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use crate::token::{Token, TokenType, TokenGlobal};
 use serde::Serialize;
-use warp::Filter;
 
 
 #[derive(Debug, Clone)]
@@ -70,9 +69,12 @@ pub struct ErrorMessage {
     column: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct Parser {
     tokens: Vec<Token>,
     declared_variables: HashMap<String, (TokenType, String)>,
+    lists: HashSet<String>,
+    process_list: HashMap<String, Vec<i32>>,
     current: usize,
     errors: Vec<ErrorMessage>,
 }
@@ -84,6 +86,8 @@ impl Parser {
             current: 0,
             declared_variables: HashMap::new(),
             errors: Vec::new(),
+            lists: HashSet::new(),
+            process_list: HashMap::new(),
         }
     }
 
@@ -123,7 +127,7 @@ impl Parser {
 
     fn parse_statement(&mut self) -> Result<StmtNode, ErrorMessage> {
         let token = self.tokens[self.current].clone();
-
+        println!("current XXXXXXXX: {:?}", self.current);
         match token.token_global {
             TokenGlobal::Identifier => {
                 println!("entered identifier");
@@ -133,9 +137,50 @@ impl Parser {
                 }
             },
             TokenGlobal::Variable => {
-                println!("entered variable ");
-                println!("current parse_statement: {:?}", self.current);
-                self.parse_assignment()
+                if self.tokens[self.current + 1].lexeme == "[" {
+                    let list_name = token.lexeme.clone();
+                    self.current += 2;
+                    let indx = self.tokens[self.current].lexeme.clone();
+                    self.current += 1;
+                    if self.tokens[self.current].lexeme == "]" {
+                        self.current += 1;
+                        if self.tokens[self.current].token_type == TokenType::Assignment {
+                            self.current += 1;
+                            let value = self.tokens[self.current].lexeme.clone();
+
+                            let index = match indx.parse::<usize>() {
+                                Ok(index) => index,
+                                Err(_) => return Err(self.error("Expected an integer index", "Error")),
+                            };
+                            println!("IS CONTAIN   {}", self.process_list.contains_key(&list_name));
+
+                            let list_values = match self.process_list.get_mut(&list_name) {
+                                Some(value) => value,
+                                None => {
+                                    // Handle the error here. For example, you can return an error or use a default value.
+                                    return Err(self.error(&format!("List '{}' not found", list_name), "Error"));
+                                }
+                            };
+                            if index >= list_values.len() {
+                                return Err(self.error("Index out of bounds", "Error"));
+                            }
+                            list_values[index] = match value.parse::<i32>() {
+                                Ok(value) => value,
+                                _ => return Err(self.error("Expected an integer value", "Error")),
+                            };
+                            self.current += 1;
+                            if self.match_token(TokenType::Semicolon).is_none() {
+                                return Err(self.error("Expected a semicolon", "Error"));
+                            }
+                            self.current -= 1;
+                        }
+                        return Ok(StmtNode::Block(vec![]));
+                    }
+                } else {
+
+                }
+                    self.parse_assignment()
+
             },
             TokenGlobal::ReservedWord => {
                 match token.token_type {
@@ -172,6 +217,24 @@ impl Parser {
                     }
                     _ => Err(self.error("Unexpected symbol in statement", "Error")),
                 }
+            },
+            TokenGlobal::List => {
+                let list_string = token.lexeme.clone();
+                if let Some(start) = list_string.find('{') {
+                    if let Some(end) = list_string.find('}') {
+                        let list_name = &list_string[..start].trim(); // Extract the list name
+                        let parts: Vec<&str> = list_name.split_whitespace().collect();
+                        let list_name = parts[1].trim_matches('[').trim_matches(']'); // Extract the list name without type and brackets
+                        let list_values_str = &list_string[start+1..end];
+                        let list_values: Vec<i32> = list_values_str.split(',')
+                            .map(|s| s.trim().parse().unwrap())
+                            .collect();
+                        println!("list_values: {:?}", list_values);
+                        println!("list_name: {:?}", list_name);
+                        self.process_list.insert(list_name.to_string(), list_values); // Insert the list name and values into the HashMap
+                    }
+                }
+                Ok(StmtNode::Block(vec![]))
             },
             _ => Err(self.error("Expected an identifier", "Error")),
         }
@@ -904,7 +967,6 @@ impl Parser {
         ))
     }
 
-
     fn parse_while_loop(&mut self) -> Result<StmtNode, ErrorMessage> {
         println!("ANA GEEEEEEET");
         if self.match_token(TokenType::While).is_none() {
@@ -1098,6 +1160,10 @@ impl Parser {
 
     pub fn get_declared_variables(&self) -> HashMap<String, (TokenType, String)> {
         self.declared_variables.clone()
+    }
+
+    pub fn get_declared_lists(&self) -> HashMap<String, Vec<i32>> {
+        self.process_list.clone()
     }
 
     fn error(&self, message: &str, message_type_: &str) -> ErrorMessage {
